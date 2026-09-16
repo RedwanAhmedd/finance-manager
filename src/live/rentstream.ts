@@ -3,6 +3,7 @@ import { dhakaDate, number, isStale, type RentSnapshot } from './models'
 import { readAll } from './read'
 
 type Amount = number | string
+type ArrayElement<T> = T extends readonly (infer U)[] ? U : never
 export interface RentRaw {
   accounts: {id: string; name: string; account_type: string; balance_known: boolean; is_archived: boolean; opening_balance: Amount; opening_balance_as_of: string | null}[]
   treasury?: {id: string; name: string; institution: string | null; country: 'Canada' | 'Bangladesh'; currency: 'CAD' | 'BDT'; balance: Amount; balance_as_of: string; is_archived: boolean}[]
@@ -99,7 +100,7 @@ export class ReadOnlyRentStreamAdapter {
   constructor(private readonly client: SupabaseClient) {}
   async getSnapshot(now = new Date()): Promise<RentSnapshot> {
     const c = this.client
-    const read = <K extends keyof RentRaw>(key: K, table: string, fields: string, filters = {}) => readAll<RentRaw[K] extends Array<infer T> ? T : never>(c, table, fields, ['id'], filters)
+    const read = <K extends keyof RentRaw>(key: K, table: string, fields: string, filters = {}) => readAll<ArrayElement<NonNullable<RentRaw[K]>>>(c, table, fields, ['id'], filters)
     const [accounts, treasury, transactions, statements, payments, entries, expenses, deposits, tenants, locks, cashResponse] = await Promise.all([
       read('accounts', 'bank_accounts', 'id,name,account_type,balance_known,is_archived,opening_balance,opening_balance_as_of'),
       read('treasury', 'treasury_accounts', 'id,name,institution,country,currency,balance,balance_as_of,is_archived'),
