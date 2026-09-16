@@ -1,11 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { dhakaDate, number, isStale, type RentSnapshot } from './models'
+import { dhakaDate, number, isStale, type BankFinancialRole, type RentSnapshot } from './models'
 import { readAll } from './read'
 
 type Amount = number | string
 type ArrayElement<T> = T extends readonly (infer U)[] ? U : never
 export interface RentRaw {
-  accounts: {id: string; name: string; account_type: string; balance_known: boolean; is_archived: boolean; opening_balance: Amount; opening_balance_as_of: string | null}[]
+  accounts: {id: string; name: string; account_type: string; balance_known: boolean; is_archived: boolean; opening_balance: Amount; opening_balance_as_of: string | null; financial_role: string; monthly_protected_outflow: Amount}[]
   treasury?: {id: string; name: string; institution: string | null; country: 'Canada' | 'Bangladesh'; currency: 'CAD' | 'BDT'; balance: Amount; balance_as_of: string; is_archived: boolean}[]
   transactions: {id: string; bank_account_id: string; txn_date: string; txn_type: string; amount: Amount}[]
   statements: {id: string; bank_account_id: string; statement_date: string; closing_balance: Amount}[]
@@ -16,6 +16,12 @@ export interface RentRaw {
   tenants: {id: string; deposit_opening_liability: Amount; status: string; move_in_date: string; actual_move_out_date: string | null}[]
   locks: {id: string; lock_date: string; actual_cash_count: Amount | null}[]
   cash: {cash_source_type: string; remaining_amount: Amount}[]
+}
+
+const ROLES = new Set<BankFinancialRole>(['corporate_operating','savings','family_restricted','personal','unclassified'])
+function financialRole(value: string): BankFinancialRole {
+  if (!ROLES.has(value as BankFinancialRole)) throw new Error(`Unsupported bank financial role: ${value}`)
+  return value as BankFinancialRole
 }
 
 export function normalizeRent(raw: RentRaw, now = new Date()): RentSnapshot {
@@ -35,7 +41,16 @@ export function normalizeRent(raw: RentRaw, now = new Date()): RentSnapshot {
         balance += number(txn.amount) * (txn.txn_type === 'withdrawal' ? -1 : 1)
       }
     } else issues.push(`${account.name}: no known statement or opening balance.`)
-    return { id: account.id, name: account.name, type: account.account_type, currency: 'BDT' as const, balance, anchorDate }
+    return {
+      id: account.id,
+      name: account.name,
+      type: account.account_type,
+      currency: 'BDT' as const,
+      balance,
+      anchorDate,
+      financialRole: financialRole(account.financial_role),
+      monthlyProtectedOutflow: number(account.monthly_protected_outflow, `${account.name} monthly protected outflow`),
+    }
   })
   if (!banks.length) throw new Error('No RentStream accounts are visible to this user')
 
@@ -56,21 +71,22 @@ export function normalizeRent(raw: RentRaw, now = new Date()): RentSnapshot {
 
   const cashBanks = banks.filter(b => b.type !== 'credit_card')
   const cards = banks.filter(b => b.type === 'credit_card')
-  // Credit limits and card overpayments are not withdrawable cash.
   const bankCashBdt = cashBanks.some(b => b.balance === null) ? null : cashBanks.reduce((s, b) => s + b.balance!, 0)
   const cardDebtBdt = cards.some(b => b.balance === null) ? null : cards.reduce((s, b) => s + Math.max(0, -b.balance!), 0)
+
   const rows = raw.payments.filter(p => p.payment_month.startsWith(month))
   if (!rows.length) issues.push('No payment records are available for the current month.')
   const expectedBdt = rows.reduce((s, p) => s + number(p.amount) + number(p.utility_bill), 0)
   const collectedBdt = rows.reduce((s, p) => s + number(p.amount_paid), 0)
   const outstandingBdt = rows.reduce((s, p) => s + Math.max(0, number(p.amount) + number(p.utility_bill) - number(p.amount_paid)), 0)
-  // Match RentStream's prior-month occupancy eligibility for the billing month.
+
   const prevEnd = new Date(`${month}-01T00:00:00Z`); prevEnd.setUTCDate(0)
   const prevEndDate = prevEnd.toISOString().slice(0, 10)
   const prevStart = `${prevEndDate.slice(0, 7)}-01`
   const withRecords = new Set(rows.map(p => p.tenant_id))
   const missing = raw.tenants.filter(t => ['active', 'notice_given'].includes(t.status) && t.move_in_date <= prevEndDate && (!t.actual_move_out_date || t.actual_move_out_date >= prevStart) && !withRecords.has(t.id)).length
   if (missing) issues.push(`${missing} eligible tenants have no payment record for this month; expected income is incomplete.`)
+
   const liabilityByTenant = new Map(raw.tenants.map(t => [t.id, number(t.deposit_opening_liability)]))
   for (const txn of raw.deposits.filter(d => d.transaction_date <= today)) {
     if (!['received', 'refunded', 'applied'].includes(txn.transaction_type)) throw new Error('Unsupported deposit movement')
@@ -79,6 +95,7 @@ export function normalizeRent(raw: RentRaw, now = new Date()): RentSnapshot {
   }
   if ([...liabilityByTenant.values()].some(v => v < -0.01)) issues.push('A tenant deposit balance is negative and needs reconciliation.')
   const refundableDepositsBdt = [...liabilityByTenant.values()].reduce((s, v) => s + Math.max(0, v), 0)
+
   const operating = raw.cash.filter(c => c.cash_source_type === 'operating')
   if (operating.length !== 1) throw new Error('Expected one shared operating-cash balance')
   const operatingCashBdt = number(operating[0].remaining_amount)
@@ -86,13 +103,39 @@ export function normalizeRent(raw: RentRaw, now = new Date()): RentSnapshot {
   const cashCountDate = raw.locks.filter(l => l.lock_date <= today && l.actual_cash_count !== null).map(l => l.lock_date).sort().pop() ?? null
   if (!cashCountDate) issues.push('No physical cash count is recorded. Operating cash is a ledger balance.')
   else if (isStale(cashCountDate, now)) issues.push(`Last physical cash count is ${cashCountDate}; today's operating cash is calculated, not freshly counted.`)
+
+  const cashReceipts30dBdt = raw.entries.filter(e => e.payment_date >= windowStart && e.payment_date <= today).reduce((s,e) => s + number(e.amount), 0)
+  const expenses30dBdt = raw.expenses.filter(e => e.expense_date >= windowStart && e.expense_date <= today).reduce((s,e) => s + number(e.amount), 0)
+  const operatingReserveTargetBdt = expenses30dBdt * 3
+
+  const sumKnownRole = (role: BankFinancialRole): number | null => {
+    const rowsForRole = cashBanks.filter(b => b.financialRole === role)
+    return rowsForRole.some(b => b.balance === null) ? null : rowsForRole.reduce((sum, b) => sum + Math.max(0, b.balance!), 0)
+  }
+  const familyRestrictedCashBdt = sumKnownRole('family_restricted')
+  const familyMonthlyProtectedOutflowBdt = cashBanks.filter(b => b.financialRole === 'family_restricted').reduce((sum,b) => sum + b.monthlyProtectedOutflow, 0)
+  const familyRunwayMonths = familyRestrictedCashBdt !== null && familyMonthlyProtectedOutflowBdt > 0
+    ? familyRestrictedCashBdt / familyMonthlyProtectedOutflowBdt
+    : null
+  const unclassifiedCashBdt = sumKnownRole('unclassified')
+  const allocationRows = cashBanks.filter(b => ['corporate_operating','savings','personal'].includes(b.financialRole))
+  const allocationEligibleCashBdt = allocationRows.some(b => b.balance === null)
+    ? null
+    : allocationRows.reduce((sum,b) => sum + b.balance!, 0) + Math.max(0, operatingCashBdt) + treasuryCashBdt
+  const strategicDeployableBdt = allocationEligibleCashBdt !== null && cardDebtBdt !== null
+    ? Math.max(0, allocationEligibleCashBdt - cardDebtBdt - operatingReserveTargetBdt)
+    : null
+
+  if ((unclassifiedCashBdt ?? 0) > 0) issues.push('Unclassified bank cash is excluded from deployable capital until its role is confirmed.')
+  if (familyRunwayMonths !== null && familyRunwayMonths < 3) issues.push('Family-restricted cash covers less than three months of its protected monthly outflow.')
   if (!treasury.some(a => a.country === 'Canada' && a.currency === 'CAD')) issues.push('Canadian treasury account is not connected.')
+
   return {
     fetchedAt: now.toISOString(), businessDate: today, month, banks, treasury, bankCashBdt, treasuryCashBdt, treasuryCashCad, cardDebtBdt,
     operatingCashBdt, cashCountDate, refundableDepositsBdt, expectedBdt, collectedBdt, outstandingBdt,
-    cashReceipts30dBdt: raw.entries.filter(e => e.payment_date >= windowStart && e.payment_date <= today).reduce((s,e) => s + number(e.amount), 0),
-    expenses30dBdt: raw.expenses.filter(e => e.expense_date >= windowStart && e.expense_date <= today).reduce((s,e) => s + number(e.amount), 0),
-    issues,
+    cashReceipts30dBdt, expenses30dBdt, operatingReserveTargetBdt, familyRestrictedCashBdt,
+    familyMonthlyProtectedOutflowBdt, familyRunwayMonths, unclassifiedCashBdt, allocationEligibleCashBdt,
+    strategicDeployableBdt, issues,
   }
 }
 
@@ -102,7 +145,7 @@ export class ReadOnlyRentStreamAdapter {
     const c = this.client
     const read = <K extends keyof RentRaw>(key: K, table: string, fields: string, filters = {}) => readAll<ArrayElement<NonNullable<RentRaw[K]>>>(c, table, fields, ['id'], filters)
     const [accounts, treasury, transactions, statements, payments, entries, expenses, deposits, tenants, locks, cashResponse] = await Promise.all([
-      read('accounts', 'bank_accounts', 'id,name,account_type,balance_known,is_archived,opening_balance,opening_balance_as_of'),
+      read('accounts', 'bank_accounts', 'id,name,account_type,balance_known,is_archived,opening_balance,opening_balance_as_of,financial_role,monthly_protected_outflow'),
       read('treasury', 'treasury_accounts', 'id,name,institution,country,currency,balance,balance_as_of,is_archived'),
       read('transactions', 'bank_transactions', 'id,bank_account_id,txn_date,txn_type,amount'),
       read('statements', 'bank_balance_statements', 'id,bank_account_id,statement_date,closing_balance'),
