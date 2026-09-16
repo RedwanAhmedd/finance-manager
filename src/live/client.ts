@@ -2,7 +2,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 export type Source = 'RentStream' | 'StockStream'
 const tables: Record<Source, Set<string>> = {
-  RentStream: new Set(['bank_accounts', 'bank_transactions', 'bank_balance_statements', 'payments', 'payment_entries', 'expenses', 'tenants', 'security_deposit_transactions', 'reconciliation_locks', 'rpc/reconciliation_cash_source_balances']),
+  RentStream: new Set(['bank_accounts', 'treasury_accounts', 'bank_transactions', 'bank_balance_statements', 'payments', 'payment_entries', 'expenses', 'tenants', 'security_deposit_transactions', 'reconciliation_locks', 'rpc/reconciliation_cash_source_balances']),
   StockStream: new Set(['positions', 'trades', 'quotes', 'symbols', 'settings', 'fx_rates']),
 }
 
