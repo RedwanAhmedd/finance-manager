@@ -1,3 +1,5 @@
 export { buildFinanceReport, buildLiquidity, recommendAllocation, toCad } from './engine/financeEngine'
 export { planScenario } from './engine/scenario'
+export { buildChatGptFinanceContext } from './integration/chatgptFacade'
 export type * from './domain/models'
+export type * from './integration/chatgptFacade'
