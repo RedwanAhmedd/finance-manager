@@ -1,3 +1,5 @@
+export type BankFinancialRole = 'corporate_operating' | 'savings' | 'family_restricted' | 'personal' | 'unclassified'
+
 export interface BankBalance {
   id: string
   name: string
@@ -5,6 +7,8 @@ export interface BankBalance {
   currency: 'BDT'
   balance: number | null
   anchorDate: string | null
+  financialRole: BankFinancialRole
+  monthlyProtectedOutflow: number
 }
 
 export interface TreasuryBalance {
@@ -35,6 +39,13 @@ export interface RentSnapshot {
   outstandingBdt: number
   cashReceipts30dBdt: number
   expenses30dBdt: number
+  operatingReserveTargetBdt: number
+  familyRestrictedCashBdt: number | null
+  familyMonthlyProtectedOutflowBdt: number
+  familyRunwayMonths: number | null
+  unclassifiedCashBdt: number | null
+  allocationEligibleCashBdt: number | null
+  strategicDeployableBdt: number | null
   issues: string[]
 }
 export interface Holding {
