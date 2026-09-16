@@ -6,12 +6,26 @@ export interface BankBalance {
   balance: number | null
   anchorDate: string | null
 }
+
+export interface TreasuryBalance {
+  id: string
+  name: string
+  institution: string | null
+  country: 'Canada' | 'Bangladesh'
+  currency: 'CAD' | 'BDT'
+  balance: number
+  balanceAsOf: string
+}
+
 export interface RentSnapshot {
   fetchedAt: string
   businessDate: string
   month: string
   banks: BankBalance[]
+  treasury?: TreasuryBalance[]
   bankCashBdt: number | null
+  treasuryCashBdt?: number
+  treasuryCashCad?: number
   cardDebtBdt: number | null
   operatingCashBdt: number | null
   cashCountDate: string | null
