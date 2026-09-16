@@ -8,7 +8,10 @@ import { isStale } from '../src/live/models'
 const now = new Date('2026-09-15T12:00:00Z')
 function rentRaw(): RentRaw {
   return {
-    accounts: [{id:'bank',name:'Bank',account_type:'bank',balance_known:true,is_archived:false,opening_balance:20,opening_balance_as_of:'2026-07-31'}, {id:'card',name:'Card',account_type:'credit_card',balance_known:true,is_archived:false,opening_balance:-100,opening_balance_as_of:'2026-08-31'}],
+    accounts: [
+      {id:'bank',name:'Bank',account_type:'bank',balance_known:true,is_archived:false,opening_balance:20,opening_balance_as_of:'2026-07-31',financial_role:'corporate_operating',monthly_protected_outflow:0},
+      {id:'card',name:'Card',account_type:'credit_card',balance_known:true,is_archived:false,opening_balance:-100,opening_balance_as_of:'2026-08-31',financial_role:'personal',monthly_protected_outflow:0},
+    ],
     treasury: [{id:'td',name:'TD Chequing',institution:'TD Canada Trust',country:'Canada',currency:'CAD',balance:159.93,balance_as_of:'2026-09-15',is_archived:false}],
     statements: [{id:'s',bank_account_id:'bank',statement_date:'2026-08-31',closing_balance:1000}],
     transactions: [{id:'t0',bank_account_id:'bank',txn_date:'2026-08-31',txn_type:'deposit',amount:999}, {id:'t1',bank_account_id:'bank',txn_date:'2026-09-01',txn_type:'deposit',amount:100}, {id:'t2',bank_account_id:'bank',txn_date:'2026-09-02',txn_type:'withdrawal',amount:40},{id:'t3',bank_account_id:'bank',txn_date:'2026-10-01',txn_type:'deposit',amount:4000}],
@@ -51,6 +54,16 @@ describe('Live source accounting', () => {
     expect(r.outstandingBdt).toBe(50)
     expect(r.cashReceipts30dBdt).toBe(50)
     expect(r.expenses30dBdt).toBe(10)
+  })
+  it('protects family-restricted cash and derives a three-month operating reserve', () => {
+    const raw=rentRaw()
+    raw.accounts.push({id:'family',name:'Family',account_type:'bank',balance_known:true,is_archived:false,opening_balance:300,opening_balance_as_of:'2026-09-01',financial_role:'family_restricted',monthly_protected_outflow:100})
+    const r=normalizeRent(raw,now)
+    expect(r.operatingReserveTargetBdt).toBe(30)
+    expect(r.familyRestrictedCashBdt).toBe(300)
+    expect(r.familyRunwayMonths).toBe(3)
+    expect(r.allocationEligibleCashBdt).toBe(1140)
+    expect(r.strategicDeployableBdt).toBe(1010)
   })
   it('does not treat unbilled tenants as zero expected income', () => {
     const raw=rentRaw();raw.payments=[]
