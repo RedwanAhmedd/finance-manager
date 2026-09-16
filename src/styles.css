@@ -87,3 +87,22 @@ h2 { margin: 4px 0 0; font-size: 21px; letter-spacing: -.025em; }
 footer { text-align: center; color: #667991; font-size: 11px; padding-top: 12px; }
 @media (max-width: 900px) { .metrics-grid { grid-template-columns: 1fr 1fr; } .two-col { grid-template-columns: 1fr; } }
 @media (max-width: 620px) { .shell { width: min(100% - 20px, 1180px); padding-top: 14px; } .metrics-grid { grid-template-columns: 1fr; } .hero { align-items: flex-start; flex-direction: column; } .hero-decision { text-align: left; } .mini-grid { grid-template-columns: 1fr; } .account-row { flex-direction: column; } .account-row .right { text-align: left; } }
+
+button { border: 1px solid var(--border); background: #13243d; color: #e8eef8; border-radius: 10px; padding: 10px 14px; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.connection-form { display: grid; gap: 12px; }
+.connection-form label { display: grid; gap: 6px; font-size: 12px; color: var(--muted); }
+.connection-form input { width: 100%; color: white; background: #091526; border: 1px solid var(--border); padding: 10px; border-radius: 8px; }
+.connected-row, .refresh-row { display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.error { color: var(--bad); }
+.mode-switch { padding: 15px 20px 0; }
+.small { font-size: 12px; line-height: 1.6; }
+.connections summary { cursor: pointer; padding: 12px 0; color: var(--muted); }
+.holdings-table-wrap { overflow-x: auto; }
+.holdings-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.holdings-table th, .holdings-table td { padding: 12px 6px; text-align: left; border-bottom: 1px solid var(--border); }
+.holdings-table th { color: var(--muted); font-size: 11px; font-weight: 500; }
+.holdings-table th:nth-child(2), .holdings-table td:nth-child(2) { text-align: right; white-space: nowrap; padding-right: 14px; }
+.input-gaps { color: #c7d4e5; padding-left: 20px; line-height: 1.65; }
+.input-gaps li { margin-bottom: 8px; }
