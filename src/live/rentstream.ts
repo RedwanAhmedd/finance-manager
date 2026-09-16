@@ -5,6 +5,7 @@ import { readAll } from './read'
 type Amount = number | string
 export interface RentRaw {
   accounts: {id: string; name: string; account_type: string; balance_known: boolean; is_archived: boolean; opening_balance: Amount; opening_balance_as_of: string | null}[]
+  treasury?: {id: string; name: string; institution: string | null; country: 'Canada' | 'Bangladesh'; currency: 'CAD' | 'BDT'; balance: Amount; balance_as_of: string; is_archived: boolean}[]
   transactions: {id: string; bank_account_id: string; txn_date: string; txn_type: string; amount: Amount}[]
   statements: {id: string; bank_account_id: string; statement_date: string; closing_balance: Amount}[]
   payments: {id: string; tenant_id: string; payment_month: string; amount: Amount; utility_bill: Amount; amount_paid: Amount}[]
@@ -36,6 +37,22 @@ export function normalizeRent(raw: RentRaw, now = new Date()): RentSnapshot {
     return { id: account.id, name: account.name, type: account.account_type, currency: 'BDT' as const, balance, anchorDate }
   })
   if (!banks.length) throw new Error('No RentStream accounts are visible to this user')
+
+  const treasury = (raw.treasury ?? []).filter(a => !a.is_archived).map(account => ({
+    id: account.id,
+    name: account.name,
+    institution: account.institution,
+    country: account.country,
+    currency: account.currency,
+    balance: number(account.balance, `${account.name} treasury balance`),
+    balanceAsOf: account.balance_as_of,
+  }))
+  for (const account of treasury) {
+    if (isStale(account.balanceAsOf, now, 7)) issues.push(`${account.name}: treasury balance is stale or undated (${account.balanceAsOf || 'unknown'}).`)
+  }
+  const treasuryCashCad = treasury.filter(a => a.currency === 'CAD').reduce((sum, a) => sum + a.balance, 0)
+  const treasuryCashBdt = treasury.filter(a => a.currency === 'BDT').reduce((sum, a) => sum + a.balance, 0)
+
   const cashBanks = banks.filter(b => b.type !== 'credit_card')
   const cards = banks.filter(b => b.type === 'credit_card')
   // Credit limits and card overpayments are not withdrawable cash.
@@ -68,9 +85,9 @@ export function normalizeRent(raw: RentRaw, now = new Date()): RentSnapshot {
   const cashCountDate = raw.locks.filter(l => l.lock_date <= today && l.actual_cash_count !== null).map(l => l.lock_date).sort().pop() ?? null
   if (!cashCountDate) issues.push('No physical cash count is recorded. Operating cash is a ledger balance.')
   else if (isStale(cashCountDate, now)) issues.push(`Last physical cash count is ${cashCountDate}; today's operating cash is calculated, not freshly counted.`)
-  issues.push('Canadian bank account is not connected. RentStream currently stores account balances in BDT.')
+  if (!treasury.some(a => a.country === 'Canada' && a.currency === 'CAD')) issues.push('Canadian treasury account is not connected.')
   return {
-    fetchedAt: now.toISOString(), businessDate: today, month, banks, bankCashBdt, cardDebtBdt,
+    fetchedAt: now.toISOString(), businessDate: today, month, banks, treasury, bankCashBdt, treasuryCashBdt, treasuryCashCad, cardDebtBdt,
     operatingCashBdt, cashCountDate, refundableDepositsBdt, expectedBdt, collectedBdt, outstandingBdt,
     cashReceipts30dBdt: raw.entries.filter(e => e.payment_date >= windowStart && e.payment_date <= today).reduce((s,e) => s + number(e.amount), 0),
     expenses30dBdt: raw.expenses.filter(e => e.expense_date >= windowStart && e.expense_date <= today).reduce((s,e) => s + number(e.amount), 0),
@@ -82,9 +99,10 @@ export class ReadOnlyRentStreamAdapter {
   constructor(private readonly client: SupabaseClient) {}
   async getSnapshot(now = new Date()): Promise<RentSnapshot> {
     const c = this.client
-    const read = <K extends keyof RentRaw>(key: K, table: string, fields: string, filters = {}) => readAll<RentRaw[K][number]>(c, table, fields, ['id'], filters)
-    const [accounts, transactions, statements, payments, entries, expenses, deposits, tenants, locks, cashResponse] = await Promise.all([
+    const read = <K extends keyof RentRaw>(key: K, table: string, fields: string, filters = {}) => readAll<RentRaw[K] extends Array<infer T> ? T : never>(c, table, fields, ['id'], filters)
+    const [accounts, treasury, transactions, statements, payments, entries, expenses, deposits, tenants, locks, cashResponse] = await Promise.all([
       read('accounts', 'bank_accounts', 'id,name,account_type,balance_known,is_archived,opening_balance,opening_balance_as_of'),
+      read('treasury', 'treasury_accounts', 'id,name,institution,country,currency,balance,balance_as_of,is_archived'),
       read('transactions', 'bank_transactions', 'id,bank_account_id,txn_date,txn_type,amount'),
       read('statements', 'bank_balance_statements', 'id,bank_account_id,statement_date,closing_balance'),
       read('payments', 'payments', 'id,tenant_id,payment_month,amount,utility_bill,amount_paid', { payment_month: `${dhakaDate(now).slice(0, 7)}-01` }),
@@ -96,6 +114,6 @@ export class ReadOnlyRentStreamAdapter {
       c.rpc('reconciliation_cash_source_balances', { p_date: dhakaDate(now) }, { get: true }),
     ])
     if (cashResponse.error) throw new Error(`Operating cash: ${cashResponse.error.message}`)
-    return normalizeRent({accounts, transactions, statements, payments, entries, expenses, deposits, tenants, locks, cash: cashResponse.data}, now)
+    return normalizeRent({accounts, treasury, transactions, statements, payments, entries, expenses, deposits, tenants, locks, cash: cashResponse.data}, now)
   }
 }
