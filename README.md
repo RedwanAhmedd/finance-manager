@@ -55,6 +55,7 @@ This is an application behavior constraint, **not a separately provisioned read-
 - `src/live/useSnapshot.ts`: refresh, error, and account-switch lifecycle.
 - `src/live/LiveDashboard.tsx`: real source evidence and incomplete-data states.
 - `src/integration/chatgptFacade.ts`: narrow read-only ChatGPT-facing context contract.
+- `src/integration/financeContextService.ts`: concurrent live reads, partial-failure isolation, and public error classification.
 - `src/domain/`, `src/engine/`, `src/fixtures/`: original normalized demo contracts, allocation engine, and synthetic data.
 
 The live snapshot types represent missing values explicitly and therefore do not silently coerce the richer source data into the original demo contracts.
@@ -67,4 +68,4 @@ npm run build
 npm audit
 ```
 
-Tests cover statement boundaries, treasury reads, future transactions, card credit exclusion, deposit accounting, billing/receipt separation, missing bills and values, trade-derived shares, CDR/FX behavior, stale cash, data pagination, source failures, and forbidden writes. Unit tests use synthetic data only. Private source snapshots and local credentials must not be committed.
+Tests cover live context orchestration, partial source failures, and sanitized error classification in addition to statement boundaries, treasury reads, future transactions, card credit exclusion, deposit accounting, billing/receipt separation, missing bills and values, trade-derived shares, CDR/FX behavior, stale cash, data pagination, source failures, and forbidden writes. Unit tests use synthetic data only. Private source snapshots and local credentials must not be committed.
