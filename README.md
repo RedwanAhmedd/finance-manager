@@ -2,9 +2,9 @@
 
 Finance Manager is a personal financial advisor across two countries: everyday money in Canada, the rental business in Bangladesh (**RentStream**) and investments (**StockStream**). Version 0.4 adds permanent server-side source connections, precomputed books for the assistant, a daily CAD/BDT reference rate, and personal bills, spending, balances and draws. The original allocation/scenario engine remains available with clearly labeled demo data.
 
-- **RentStream owns:** bank and operating cash, rental billing, receipts, expenses, reconciliation, and tenant deposit liabilities.
+- **RentStream owns:** rental billing, receipts, expenses, reconciliation, Bangladesh bank/cash records with their financial roles, tenant deposit records, and treasury cash snapshots such as the owner's Canadian (TD) bank balances.
 - **StockStream owns:** holdings, trades, recorded brokerage cash, quotes, and investment settings.
-- **Finance Manager owns:** the combined view and advisor, plus the owner's personal records (bills, logged spending, stated balances, draws, statement imports). Those are stored in `money_*` tables inside the StockStream database (the Supabase account's free projects are in use) and are reachable only by this app's local server.
+- **Finance Manager owns:** the combined view and advisor, plus the owner's personal records (bills, logged spending, draws, statement imports). Those are stored in `money_*` tables inside the StockStream database (the Supabase account's free projects are in use) and are reachable only by this app's local server.
 
 ## Run locally
 
@@ -27,7 +27,9 @@ Open http://127.0.0.1:5177 and sign in to each source using its existing email/p
 
 - **Banks:** the latest statement on or before the Bangladesh business date is the anchor. Only later dated movements through that date affect its balance. Unknown balances stay unknown. Credit-card debt and card credit are excluded from liquid cash.
 - **Operating cash:** read from RentStream's existing stable `reconciliation_cash_source_balances` function using GET. The physical-count date is shown separately from the calculated cash balance.
-- **Deposits:** opening refundable liabilities plus receipts, minus refunds and applications. Deposit cash can remain inside operating cash, but its liability is not rental profit or free money.
+- **Treasury accounts:** cross-border cash snapshots (the TD accounts) are read from RentStream's `treasury_accounts` with their native currency and balance date. CAD and BDT are only compared through the dated reference rate.
+- **Capital allocation:** account roles in RentStream decide what is deployable: three months of recorded expenses are protected, family-restricted and unclassified accounts are set apart.
+- **Deposits:** tracked per tenant. They revolve (departing tenants normally use theirs as their final two months of rent and new tenants bring new ones), so they are not deducted from available cash.
 - **Rental billing:** current-calendar-month rent plus utility bills, settlements against those bills, and outstanding amounts. Actual cash receipt entries and expenses use a separate trailing 30-day window. Missing eligible tenants' bills are flagged.
 - **Investments:** trade history determines remaining non-cash shares when present. Direct quotes, manual prices, issuer-derived CDR prices, and estimates retain their labels and dates. USD holdings require a dated USD/CAD rate. Missing prices/currencies withhold the portfolio total instead of substituting cost basis.
 - **Brokerage cash:** comes from cash-role positions, counted once in portfolio value and shown separately as liquidity. No cash record means unknown. An old recorded zero is labeled stale.
@@ -54,7 +56,7 @@ The endpoint rejects cross-origin requests and non-JSON bodies. A refresh, sign-
 
 ## Everyday money
 
-`/api/money` (`server/money.ts`) stores the owner's recorded bills, hand-logged spending, stated account balances and draws from the rental business, with statement import endpoints. TD and Wealthsimple CSV parsers are intentionally not written until real exports are available (`src/money/parsers.ts`). Its client may only touch the `money_*` tables. Those tables have RLS on with no policies and no grants for browser roles, so the publishable key is refused. Migrations are kept in the StockStream repo (`supabase/migrations/20260917*_finance_manager_*`).
+`/api/money` (`server/money.ts`) stores the owner's recorded bills, hand-logged spending and draws from the rental business (Canadian account balances live in RentStream's treasury accounts), with statement import endpoints. TD and Wealthsimple CSV parsers are intentionally not written until real exports are available (`src/money/parsers.ts`). Its client may only touch the `money_*` tables. Those tables have RLS on with no policies and no grants for browser roles, so the publishable key is refused. Migrations are kept in the StockStream repo (`supabase/migrations/20260917*_finance_manager_*`).
 
 ## Read-only scope
 
@@ -73,6 +75,7 @@ Source reads stay GET-only. This is an application behavior constraint, **not a 
 - `server/`: local assistant (`assistant.ts`, `prompt.ts`, `providers.ts`), permanent source reads (`sources.ts`), CAD/BDT rate (`fx.ts`) and personal money API (`money.ts`).
 - `src/books/`: RentStream, StockStream, personal and two-country overview books.
 - `src/money/`: personal money types, categorisation, statement lines and the Everyday money panel.
+- `src/integration/chatgptFacade.ts`: narrow read-only ChatGPT-facing context contract (see `docs/chatgpt-integration.md`).
 - `src/domain/`, `src/engine/`, `src/fixtures/`: v0.1 normalized demo contracts, allocation engine, and synthetic data.
 
 The live snapshot types represent missing values explicitly and therefore do not silently coerce the richer source data into the original demo contracts.

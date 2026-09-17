@@ -13,8 +13,9 @@ export interface Overview {
     depositsHeld: number
     cardDebt: number | null
     cashAfterDebt: number | null
-    monthOfOperatingCosts: number | null
-    cashAfterReserve: number | null
+    familyRestricted: number | null
+    operatingReserveTarget: number
+    strategicDeployable: number | null
     latestMonthlySurplus: { month: string; amount: number } | null
   } | null
   canada: { portfolio: number | null; cash: number | null; averageMonthlyInvested: number | null } | null
@@ -34,8 +35,9 @@ export function buildOverview(rent: RentSnapshot | null, stock: StockSnapshot | 
     cardDebt: rent.cardDebtBdt,
     // Deposits revolve into departing tenants' final rent, so they are not subtracted.
     cashAfterDebt: rent.bankCashBdt === null || rent.cardDebtBdt === null ? null : rent.bankCashBdt - rent.cardDebtBdt,
-    monthOfOperatingCosts: books?.opportunities.reserve.oneMonthOperatingExpenses ?? null,
-    cashAfterReserve: books?.opportunities.reserve.cashAfterDebtAndReserve ?? null,
+    familyRestricted: rent.familyRestrictedCashBdt,
+    operatingReserveTarget: rent.operatingReserveTargetBdt,
+    strategicDeployable: rent.strategicDeployableBdt,
     latestMonthlySurplus: books?.opportunities.latestCompleteSurplus ? { month: books.opportunities.latestCompleteSurplus.month, amount: books.opportunities.latestCompleteSurplus.surplus } : null,
   } : null
   const canada = stock ? { portfolio: stock.portfolioCad, cash: stock.cashCad, averageMonthlyInvested: stock.books?.goal.averageMonthlyInvested ?? null } : null
@@ -49,8 +51,8 @@ export function buildOverview(rent: RentSnapshot | null, stock: StockSnapshot | 
     latestCompleteMonth: completeMonths.length ? { month: completeMonths[completeMonths.length - 1].month, spending: completeMonths[completeMonths.length - 1].spending } : null,
     averageSpending,
     draws12Months: Math.round(personalBooks.draws.reduce((s, d) => s + d.cad, 0) * 100) / 100,
-    monthsOfSpendingInBangladeshCash: averageSpending && averageSpending.amount > 0 && bangladesh?.cashAfterReserve != null
-      ? Math.round(bangladesh.cashAfterReserve / rate.rate / averageSpending.amount * 10) / 10 : null,
+    monthsOfSpendingInBangladeshCash: averageSpending && averageSpending.amount > 0 && bangladesh?.strategicDeployable != null
+      ? Math.round(bangladesh.strategicDeployable / rate.rate / averageSpending.amount * 10) / 10 : null,
   } : null
   return {
     rate, bangladesh, canada, personal,
@@ -71,7 +73,8 @@ Reference rate: 1 CAD = ৳${r.toFixed(2)} (1 BDT = C$${(1 / r).toFixed(5)}), da
 - Bank cash ${both(b.bankCash, r)}; card debt ${both(b.cardDebt, r)}.
 - Cash after card debt: ${both(b.cashAfterDebt, r)}.
 - Tenant deposits held ${both(b.depositsHeld, r)}: revolving, normally used as departing tenants' final two months of rent and replaced by new tenants' deposits, so not set aside.
-- After also keeping one month of operating costs (${both(b.monthOfOperatingCosts, r)}): ${both(b.cashAfterReserve, r)}.
+- Family-restricted cash (kept for family use, not deployable): ${both(b.familyRestricted, r)}.
+- Strategic deployable cash after card debt, a three-month operating reserve (${both(b.operatingReserveTarget, r)}) and excluding family-restricted and unclassified accounts: ${both(b.strategicDeployable, r)}.
 - Latest complete month's operating surplus: ${b.latestMonthlySurplus ? `${both(b.latestMonthlySurplus.amount, r)} (${b.latestMonthlySurplus.month}, the only complete month so far)` : 'unknown'}.`)
   else lines.push('Bangladesh: RentStream not read.')
   if (c) lines.push(`Canada (investments):
@@ -83,7 +86,7 @@ Reference rate: 1 CAD = ৳${r.toFixed(2)} (1 BDT = C$${(1 / r).toFixed(5)}), da
 - Latest complete month: ${p.latestCompleteMonth ? `${cad(p.latestCompleteMonth.spending)} (≈ ${bdt(p.latestCompleteMonth.spending * r)}) in ${p.latestCompleteMonth.month}` : 'no complete month recorded yet'}.
 - Past average: ${p.averageSpending ? `${cad(p.averageSpending.amount)} a month (≈ ${bdt(p.averageSpending.amount * r)}) over ${p.averageSpending.months} complete month${p.averageSpending.months === 1 ? '' : 's'}` : 'not enough records yet'}.
 - Draws received from the rental business in the last 12 months: ${cad(p.draws12Months)}.
-- Bangladesh cash after card debt and a one-month business reserve equals ${p.monthsOfSpendingInBangladeshCash === null ? 'an unknown number of' : p.monthsOfSpendingInBangladeshCash} months of that average personal spending.`)
+- Bangladesh strategic deployable cash equals ${p.monthsOfSpendingInBangladeshCash === null ? 'an unknown number of' : p.monthsOfSpendingInBangladeshCash} months of that average personal spending.`)
   else lines.push('Personal spending in Canada: not connected.')
   lines.push(`Across both:
 - The owner's total (Bangladesh business cash after card debt, recorded Canadian account balances and the investment portfolio): ${cad(o.ownersTotalCad)}. Of this, the portfolio is invested, not spending cash.

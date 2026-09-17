@@ -28,7 +28,8 @@ const bills = [
 ]
 
 describe('Personal books', () => {
-  const books = buildPersonalBooks({ transactions, bills, rules: [], balances: [{ id: 's1', account: 'TD savings', balance: 337.04, as_of: '2026-09-17', note: null }, { id: 's2', account: 'td_chequing', balance: 3500, as_of: '2026-08-01', note: null }], suggestions: [{ name: 'SPOTIFY', category: 'subscriptions', amount: 11.99, months: ['2026-07', '2026-08'] }] }, now)
+  const treasury = [{ id: 'a', name: 'TD Every Day Savings Account', institution: 'TD Canada Trust', country: 'Canada' as const, currency: 'CAD' as const, balance: 337.04, balanceAsOf: '2026-09-16' }, { id: 'b', name: 'Dhaka FDR', institution: null, country: 'Bangladesh' as const, currency: 'BDT' as const, balance: 500000, balanceAsOf: '2026-09-16' }]
+  const books = buildPersonalBooks({ transactions, bills, rules: [], suggestions: [{ name: 'SPOTIFY', category: 'subscriptions', amount: 11.99, months: ['2026-07', '2026-08'] }] }, now, treasury)
   it('totals spending by month net of refunds, excluding transfers and investing', () => {
     expect(books.recordsSince).toBe('2026-06-01')
     expect(books.months.map(m => [m.month, m.complete, m.spending, m.draws, m.net])).toEqual([
@@ -47,8 +48,8 @@ describe('Personal books', () => {
     expect(books.bills).toMatchObject({ monthlyTotal: 1718.99, subscriptionsMonthly: 18.99, subscriptionsCount: 1, dueLaterThisMonth: [{ name: 'Netflix', amount: 18.99, dueDay: 20 }] })
     expect(books.bills.active.map(b => b.name)).toEqual(['Rent', 'Car insurance', 'Netflix'])
     expect(books.draws).toEqual([{ date: '2026-09-05', cad: 2000, bdt: 176000 }])
-    // A statement line newer than a stated balance wins for that account.
-    expect(books.balances).toEqual([{ account: 'td_chequing', balance: 3600, date: '2026-09-02', source: 'statement' }, { account: 'TD savings', balance: 337.04, date: '2026-09-17', source: 'stated' }])
+    // Canadian balances come from RentStream treasury accounts; BDT treasury is not personal Canadian cash.
+    expect(books.balances).toEqual([{ account: 'td_chequing', balance: 3600, date: '2026-09-02', source: 'statement' }, { account: 'TD Every Day Savings Account', balance: 337.04, date: '2026-09-16', source: 'rentstream' }])
     expect(books.needsReview).toBe(1)
   })
   it('renders facts in C$ with the guide and no projections', () => {

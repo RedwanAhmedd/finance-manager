@@ -2,11 +2,11 @@ import http from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createMoneyHandler, type MoneyStore } from '../server/money'
-import type { Bill, CategoryRule, MoneyTransaction, StatedBalance } from '../src/money/types'
+import type { Bill, CategoryRule, MoneyTransaction } from '../src/money/types'
 import type { StatementLine } from '../src/money/lines'
 
 function memoryStore() {
-  const db = { transactions: [] as MoneyTransaction[], bills: [] as Bill[], rules: [] as CategoryRule[], balances: [] as StatedBalance[] }
+  const db = { transactions: [] as MoneyTransaction[], bills: [] as Bill[], rules: [] as CategoryRule[] }
   let n = 0
   const store: MoneyStore = {
     async load() { return structuredClone(db) },
@@ -22,7 +22,6 @@ function memoryStore() {
       return saved
     },
     async updateTransaction(id, patch) { const t = db.transactions.find(x => x.id === id)!; Object.assign(t, patch); return t },
-    async saveBalance(balance) { db.balances.push({ ...balance, id: `s${++n}` }) },
     async saveRule(rule) { db.rules = [...db.rules.filter(r => r.pattern !== rule.pattern), { ...rule, id: `r${++n}` }] },
   }
   return { db, store }
@@ -81,9 +80,7 @@ describe('Personal money API', () => {
     expect((await post('/api/money/draws', { date: '10/09/2026', amount_cad: 2000 })).status).toBe(400)
     expect((await post('/api/money/spending', { date: '2026-09-12', amount: 84.2, category: 'groceries', description: 'No Frills' })).status).toBe(200)
     expect((await post('/api/money/spending', { date: '2026-09-12', amount: 10, category: 'groceries' })).status).toBe(400)
-    expect((await post('/api/money/balances', { account: 'TD savings', balance: '337.04', as_of: '2026-09-17' })).status).toBe(200)
-    expect((await post('/api/money/balances', { account: '', balance: 5, as_of: '2026-09-17' })).status).toBe(400)
-    expect(db.balances).toEqual([{ id: expect.any(String), account: 'TD savings', balance: 337.04, as_of: '2026-09-17', note: null }])
+    expect((await post('/api/money/balances', { account: 'TD savings', balance: 1, as_of: '2026-09-17' })).status).toBe(404)
     expect(db.transactions.find(t => t.description === 'No Frills')).toMatchObject({ kind: 'spend', amount: -84.2, category: 'groceries', account: 'manual', source: 'manual', flagged: false })
     expect(db.bills[0]).toMatchObject({ name: 'Rent', amount: 1650, due_day: 1, active: true, account: null })
     expect(db.transactions[0]).toMatchObject({ kind: 'draw', amount: 2000, amount_bdt: 175000, account: 'manual', source: 'manual' })

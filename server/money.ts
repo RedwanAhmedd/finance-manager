@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { ACCOUNTS, CADENCES, CATEGORIES, KINDS, type Bill, type CategoryRule, type MoneyTransaction, type StatedBalance } from '../src/money/types.ts'
+import { ACCOUNTS, CADENCES, CATEGORIES, KINDS, type Bill, type CategoryRule, type MoneyTransaction } from '../src/money/types.ts'
 import { merchantKey, prepareLines, suggestBills, type PreparedLine } from '../src/money/lines.ts'
 import { parseStatement, UnsupportedStatement } from '../src/money/parsers.ts'
 
@@ -10,16 +10,15 @@ import { parseStatement, UnsupportedStatement } from '../src/money/parsers.ts'
 // The client's transport allows nothing but those three tables.
 
 const MAX_BODY_BYTES = 3_000_000
-const TABLES = new Set(['money_transactions', 'money_bills', 'money_category_rules', 'money_balances'])
+const TABLES = new Set(['money_transactions', 'money_bills', 'money_category_rules'])
 
 export interface MoneyStore {
-  load(): Promise<{ transactions: MoneyTransaction[]; bills: Bill[]; rules: CategoryRule[]; balances: StatedBalance[] }>
+  load(): Promise<{ transactions: MoneyTransaction[]; bills: Bill[]; rules: CategoryRule[] }>
   existingHashes(hashes: string[]): Promise<Set<string>>
   insertTransactions(rows: Omit<MoneyTransaction, 'id'>[]): Promise<number>
   saveBill(bill: Omit<Bill, 'id'> & { id?: string }): Promise<Bill>
   updateTransaction(id: string, patch: Partial<Pick<MoneyTransaction, 'kind' | 'category' | 'flagged'>>): Promise<MoneyTransaction>
   saveRule(rule: Omit<CategoryRule, 'id'>): Promise<void>
-  saveBalance(balance: Omit<StatedBalance, 'id'>): Promise<void>
 }
 
 class InputError extends Error {}
@@ -52,13 +51,12 @@ export function supabaseMoneyStore(url: string, secretKey: string): MoneyStore {
   const tx = (r: Record<string, unknown>) => ({ ...r, amount: num(r.amount), amount_bdt: num(r.amount_bdt), balance_after: num(r.balance_after) }) as MoneyTransaction
   return {
     async load() {
-      const [transactions, bills, rules, balances] = await Promise.all([
+      const [transactions, bills, rules] = await Promise.all([
         readAll<Record<string, unknown>>(client, 'money_transactions', 'posted_date'),
         readAll<Record<string, unknown>>(client, 'money_bills', 'name'),
         readAll<CategoryRule>(client, 'money_category_rules', 'pattern'),
-        readAll<Record<string, unknown>>(client, 'money_balances', 'as_of'),
       ])
-      return { transactions: transactions.map(tx), bills: bills.map(b => ({ ...b, amount: Number(b.amount) }) as Bill), rules, balances: balances.map(b => ({ ...b, balance: Number(b.balance) }) as StatedBalance) }
+      return { transactions: transactions.map(tx), bills: bills.map(b => ({ ...b, amount: Number(b.amount) }) as Bill), rules }
     },
     async existingHashes(hashes) {
       const found = new Set<string>()
@@ -91,10 +89,6 @@ export function supabaseMoneyStore(url: string, secretKey: string): MoneyStore {
       const { data, error } = await client.from('money_transactions').update(patch).eq('id', id).select().single()
       if (error) throw new Error(error.message)
       return tx(data)
-    },
-    async saveBalance(balance) {
-      const { error } = await client.from('money_balances').insert(balance)
-      if (error) throw new Error(error.message)
     },
     async saveRule(rule) {
       const { error } = await client.from('money_category_rules').upsert(rule, { onConflict: 'pattern' })
@@ -210,14 +204,6 @@ export function createMoneyHandler(store: MoneyStore | null, parse = parseStatem
         const amount_bdt = body.amount_bdt === undefined || body.amount_bdt === null || body.amount_bdt === '' ? null : money(body.amount_bdt, 'amount_bdt')
         const note = text(body.note, 'note', 500)
         await store.insertTransactions([{ account: 'manual', posted_date, description: note ?? 'Draw from rental business', amount, amount_bdt, kind: 'draw', category: null, flagged: false, balance_after: null, bill_id: null, note, source: 'manual', import_hash: `manual|draw|${randomUUID()}` }])
-        return json(200, { ok: true })
-      }
-      if (path === '/api/money/balances') {
-        // A balance the owner states, e.g. "TD savings is $337.04". Kept as a dated record.
-        const as_of = date(body.as_of, 'as_of')
-        const account = text(body.account, 'account', 60, true)!
-        const balance = money(body.balance, 'balance', { positive: false })
-        await store.saveBalance({ account, balance, as_of, note: text(body.note, 'note', 500) })
         return json(200, { ok: true })
       }
       if (path === '/api/money/spending') {

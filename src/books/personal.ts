@@ -1,6 +1,7 @@
 import { monthlyEquivalent } from '../money/categorise'
 import { merchantKey, type SuggestedBill } from '../money/lines'
 import type { Category, MoneyData, MoneyTransaction } from '../money/types'
+import type { TreasuryBalance } from '../live/models'
 
 // The owner's personal money in Canada, as books: what was spent by category and
 // month, recorded bills, draws from the rental business and account balances.
@@ -33,7 +34,7 @@ export interface PersonalBooks {
     suggested: SuggestedBill[]
   }
   draws: { date: string; cad: number; bdt: number | null }[]
-  balances: { account: string; balance: number; date: string; source: 'statement' | 'stated' }[]
+  balances: { account: string; balance: number; date: string; source: 'statement' | 'rentstream' }[]
   needsReview: number
 }
 
@@ -45,7 +46,7 @@ export const canadaDate = (now = new Date()) => new Intl.DateTimeFormat('en-CA',
 // Spending is money out as a positive number, net of refunds.
 const spent = (t: MoneyTransaction) => t.kind === 'spend' || t.kind === 'refund' ? -t.amount : 0
 
-export function buildPersonalBooks(data: MoneyData & { suggestions?: SuggestedBill[] }, now = new Date()): PersonalBooks {
+export function buildPersonalBooks(data: MoneyData & { suggestions?: SuggestedBill[] }, now = new Date(), treasury: TreasuryBalance[] = []): PersonalBooks {
   const today = canadaDate(now)
   const current = today.slice(0, 7)
   const day = Number(today.slice(8, 10))
@@ -106,14 +107,12 @@ export function buildPersonalBooks(data: MoneyData & { suggestions?: SuggestedBi
       suggested: data.suggestions ?? [],
     },
     draws: tx.filter(t => t.kind === 'draw' && t.posted_date >= `${Number(today.slice(0, 4)) - 1}${today.slice(4)}`).map(t => ({ date: t.posted_date, cad: t.amount, bdt: t.amount_bdt })).sort((a, b) => b.date.localeCompare(a.date)),
-    // Latest balance per account, whether read from a statement line or stated by the owner.
+    // Latest balance per account: RentStream treasury accounts (the owner's recorded
+    // Canadian balances) and any balance column in imported statement lines.
     balances: (() => {
-      const latest = new Map<string, { account: string; balance: number; date: string; source: 'statement' | 'stated' }>()
+      const latest = new Map<string, { account: string; balance: number; date: string; source: 'statement' | 'rentstream' }>()
       for (const [account, t] of latestByAccount) latest.set(account, { account, balance: t.balance_after!, date: t.posted_date, source: 'statement' })
-      for (const b of [...(data.balances ?? [])].filter(b => b.as_of <= today).sort((x, y) => x.as_of.localeCompare(y.as_of))) {
-        const existing = latest.get(b.account)
-        if (!existing || b.as_of >= existing.date) latest.set(b.account, { account: b.account, balance: b.balance, date: b.as_of, source: 'stated' })
-      }
+      for (const a of treasury.filter(a => a.currency === 'CAD' && a.balanceAsOf <= today)) latest.set(a.name, { account: a.name, balance: a.balance, date: a.balanceAsOf, source: 'rentstream' })
       return [...latest.values()].sort((a, b) => b.balance - a.balance)
     })(),
     needsReview: tx.filter(t => t.flagged).length,

@@ -45,6 +45,6 @@ ${b.draws.length ? b.draws.map(d => `${d.date}: ${cad(d.cad)}${d.bdt ? ` (৳${d
 Total: ${cad(b.draws.reduce((s, d) => s + d.cad, 0))}.`)
 
   sections.push(`### Latest recorded account balances
-${b.balances.map(x => `${ACCOUNT_NAMES[x.account] ?? x.account}: ${cad(x.balance)} on ${x.date} (${x.source === 'stated' ? 'stated by the owner' : 'from a statement'})`).join('; ') || 'No balances recorded.'}`)
+${b.balances.map(x => `${ACCOUNT_NAMES[x.account] ?? x.account}: ${cad(x.balance)} on ${x.date} (${x.source === 'rentstream' ? 'recorded in RentStream' : 'from a statement'})`).join('; ') || 'No balances recorded.'}`)
   return sections.join('\n\n')
 }

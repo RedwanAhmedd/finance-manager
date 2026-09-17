@@ -3,6 +3,7 @@ import { buildPersonalBooks } from '../books/personal'
 import { monthlyEquivalent } from './categorise'
 import type { SuggestedBill } from './lines'
 import { CADENCES, CATEGORIES, KINDS, type Bill, type Kind, type MoneyData } from './types'
+import type { TreasuryBalance } from '../live/models'
 
 export type MoneyState = (MoneyData & { suggestions: SuggestedBill[] }) | null
 type View = 'month' | 'log' | 'bills' | 'review' | 'import' | 'draws'
@@ -21,9 +22,9 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 // Personal money in Canada: what was spent, recorded bills, statement imports,
 // lines to review and draws from the rental business. Records only; the
 // advisor above explains them.
-export default function EverydayMoney({ money, error, onChanged }: { money: MoneyState; error: string; onChanged: () => void }) {
+export default function EverydayMoney({ money, treasury, error, onChanged }: { money: MoneyState; treasury: TreasuryBalance[]; error: string; onChanged: () => void }) {
   const [view, setView] = useState<View>('month')
-  const books = useMemo(() => money ? buildPersonalBooks(money) : null, [money])
+  const books = useMemo(() => money ? buildPersonalBooks(money, new Date(), treasury) : null, [money, treasury])
   const flagged = money?.transactions.filter(t => t.flagged).length ?? 0
 
   return <section className="panel money" aria-label="Everyday money">
@@ -193,27 +194,6 @@ function LogSpendingView({ books, onChanged }: { books: ReturnType<typeof buildP
   </>
 }
 
-function BalancesForm({ books, onChanged }: { books: ReturnType<typeof buildPersonalBooks>; onChanged: () => void }) {
-  const [form, setForm] = useState({ account: 'TD savings', balance: '', as_of: books.asOf })
-  const [status, setStatus] = useState('')
-  const submit = async (e: FormEvent) => {
-    e.preventDefault(); setStatus('')
-    try { await post('/api/money/balances', form); setStatus(`${form.account} balance recorded.`); setForm({ ...form, balance: '' }); onChanged() }
-    catch (err) { setStatus(err instanceof Error ? err.message : 'Could not record the balance') }
-  }
-  return <>
-    <p className="muted small">Account balances (latest per account):</p>
-    {books.balances.length ? <div className="account-list">{books.balances.map(b => <div className="account-row" key={b.account}><span>{b.account}<span className="muted small"> · {b.date}{b.source === 'stated' ? ' · stated' : ''}</span></span><strong>{cad(b.balance)}</strong></div>)}</div> : <p className="muted small">No balances recorded.</p>}
-    <form className="money-form" onSubmit={e => void submit(e)}>
-      <input aria-label="Account" placeholder="Account (e.g. TD savings)" value={form.account} onChange={e => setForm({ ...form, account: e.target.value })} required maxLength={60} />
-      <input aria-label="Balance C$" placeholder="Balance C$" inputMode="decimal" value={form.balance} onChange={e => setForm({ ...form, balance: e.target.value })} required />
-      <input aria-label="As of" type="date" value={form.as_of} onChange={e => setForm({ ...form, as_of: e.target.value })} required />
-      <button type="submit">Record balance</button>
-    </form>
-    {status && <p className="small muted" role="status">{status}</p>}
-  </>
-}
-
 function DrawsView({ books, onChanged }: { books: ReturnType<typeof buildPersonalBooks>; onChanged: () => void }) {
   const [form, setForm] = useState({ date: books.asOf, amount_cad: '', amount_bdt: '', note: '' })
   const [status, setStatus] = useState('')
@@ -231,7 +211,8 @@ function DrawsView({ books, onChanged }: { books: ReturnType<typeof buildPersona
       <input aria-label="Note" placeholder="Note" value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} maxLength={500} />
       <button type="submit">Record draw</button>
     </form>
-    <BalancesForm books={books} onChanged={onChanged} />
+    <p className="muted small">Canadian account balances (recorded in RentStream):</p>
+    {books.balances.length ? <div className="account-list">{books.balances.map(b => <div className="account-row" key={b.account}><span>{b.account}<span className="muted small"> · {b.date}</span></span><strong>{cad(b.balance)}</strong></div>)}</div> : <p className="muted small">No Canadian balances recorded in RentStream.</p>}
     <p className="muted small">Draws received in the last 12 months:</p>
     {books.draws.length ? <div className="account-list">{books.draws.map((d, i) => <div className="account-row" key={i}><span>{d.date}</span><strong>{cad(d.cad)}{d.bdt ? ` · ৳${d.bdt.toLocaleString('en-US')}` : ''}</strong></div>)}</div> : <p className="muted small">No draws recorded in the last 12 months.</p>}
     {status && <p className="small muted" role="status">{status}</p>}

@@ -2,7 +2,7 @@
 // permanent connection. No writes or arbitrary RPCs either way.
 export type Source = 'RentStream' | 'StockStream'
 const tables: Record<Source, Set<string>> = {
-  RentStream: new Set(['bank_accounts', 'bank_transactions', 'bank_balance_statements', 'payments', 'payment_entries', 'expenses', 'tenants', 'security_deposit_transactions', 'reconciliation_locks', 'rpc/reconciliation_cash_source_balances', 'properties', 'manual_income', 'rent_history']),
+  RentStream: new Set(['bank_accounts', 'treasury_accounts', 'bank_transactions', 'bank_balance_statements', 'payments', 'payment_entries', 'expenses', 'tenants', 'security_deposit_transactions', 'reconciliation_locks', 'rpc/reconciliation_cash_source_balances', 'properties', 'manual_income', 'rent_history']),
   StockStream: new Set(['positions', 'trades', 'quotes', 'symbols', 'settings', 'fx_rates', 'watchlist']),
 }
 

@@ -58,7 +58,7 @@ export interface RentBooks {
   opportunities: {
     longUnchangedRent: { years: number; tenants: number; monthlyRent: number }
     relets: { tenants: number; withPreviousTenant: number; rentUp: number; rentSame: number; rentDown: number; monthlyRentChange: number; averageVacantDays: number | null; rentLostWhileVacant: number }
-    reserve: { latestCompleteExpenseMonth: string | null; oneMonthOperatingExpenses: number | null; cashAfterDebtAndReserve: number | null }
+    allocation: { operatingReserveTarget: number; familyRestricted: number | null; familyMonthlyOutflow: number; unclassified: number | null; allocationEligible: number | null; strategicDeployable: number | null }
     latestCompleteSurplus: { month: string; surplus: number } | null
   }
 }
@@ -220,12 +220,13 @@ export function buildRentBooks(raw: RentRaw & RentDetail, snapshot: RentSnapshot
       averageVacantDays: relets.length ? Math.round(sum(relets, r => r.vacantDays) / relets.length) : null,
       rentLostWhileVacant: Math.round(sum(relets, r => r.lost)),
     },
-    reserve: {
-      latestCompleteExpenseMonth: latestComplete?.month ?? null,
-      oneMonthOperatingExpenses: latestComplete?.operating ?? null,
-      // Deposits revolve (they become departing tenants' final rent), so they are not held back here.
-      cashAfterDebtAndReserve: snapshot.bankCashBdt === null || snapshot.cardDebtBdt === null || !latestComplete ? null
-        : snapshot.bankCashBdt - snapshot.cardDebtBdt - latestComplete.operating,
+    // RentStream's account roles decide what is deployable: three months of recorded
+    // expenses are protected, family-restricted and unclassified cash is set apart.
+    // Deposits revolve (they become departing tenants' final rent) and are not deducted.
+    allocation: {
+      operatingReserveTarget: snapshot.operatingReserveTargetBdt, familyRestricted: snapshot.familyRestrictedCashBdt,
+      familyMonthlyOutflow: snapshot.familyMonthlyProtectedOutflowBdt, unclassified: snapshot.unclassifiedCashBdt,
+      allocationEligible: snapshot.allocationEligibleCashBdt, strategicDeployable: snapshot.strategicDeployableBdt,
     },
     latestCompleteSurplus: surplus ? { month: surplus.month, surplus: surplus.surplus } : null,
   }

@@ -1,5 +1,7 @@
 import type { RentBooks } from '../books/rent'
 import type { StockBooks } from '../books/stock'
+export type BankFinancialRole = 'corporate_operating' | 'savings' | 'family_restricted' | 'personal' | 'unclassified'
+
 export interface BankBalance {
   id: string
   name: string
@@ -7,12 +9,27 @@ export interface BankBalance {
   currency: 'BDT'
   balance: number | null
   anchorDate: string | null
+  financialRole: BankFinancialRole
+  monthlyProtectedOutflow: number
+}
+
+export interface TreasuryBalance {
+  id: string
+  name: string
+  institution: string | null
+  country: 'Canada' | 'Bangladesh'
+  currency: 'CAD' | 'BDT'
+  balance: number
+  balanceAsOf: string
 }
 export interface RentSnapshot {
   fetchedAt: string
   businessDate: string
   month: string
   banks: BankBalance[]
+  treasury?: TreasuryBalance[]
+  treasuryCashBdt?: number
+  treasuryCashCad?: number
   bankCashBdt: number | null
   cardDebtBdt: number | null
   operatingCashBdt: number | null
@@ -26,6 +43,13 @@ export interface RentSnapshot {
   overdueTenants: number
   overdueSince: string | null
   cashReceipts30dBdt: number
+  operatingReserveTargetBdt: number
+  familyRestrictedCashBdt: number | null
+  familyMonthlyProtectedOutflowBdt: number
+  familyRunwayMonths: number | null
+  unclassifiedCashBdt: number | null
+  allocationEligibleCashBdt: number | null
+  strategicDeployableBdt: number | null
   books?: RentBooks
   expenses30dBdt: number
   issues: string[]

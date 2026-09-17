@@ -46,8 +46,6 @@ export interface Bill {
 
 export interface CategoryRule { id: string; pattern: string; kind: Kind; category: Category | null }
 
-export interface StatedBalance { id: string; account: string; balance: number; as_of: string; note: string | null }
-
-export interface MoneyData { transactions: MoneyTransaction[]; bills: Bill[]; rules: CategoryRule[]; balances?: StatedBalance[] }
+export interface MoneyData { transactions: MoneyTransaction[]; bills: Bill[]; rules: CategoryRule[] }
 
 export const spendsMoney = (kind: Kind) => kind === 'spend' || kind === 'refund'

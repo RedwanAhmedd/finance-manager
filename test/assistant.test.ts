@@ -10,9 +10,9 @@ import type { RentSnapshot, StockSnapshot } from '../src/live/models'
 
 const rent: RentSnapshot = {
   fetchedAt: '2026-09-15T12:00:00.000Z', businessDate: '2026-09-15', month: '2026-09',
-  banks: [{ id: 'b', name: 'Bank', type: 'bank', currency: 'BDT', balance: 1000, anchorDate: '2026-08-31' }],
+  banks: [{ id: 'b', name: 'Bank', type: 'bank', currency: 'BDT', balance: 1000, anchorDate: '2026-08-31', financialRole: 'corporate_operating', monthlyProtectedOutflow: 0 }],
   bankCashBdt: 1000, cardDebtBdt: 100, operatingCashBdt: 80, cashCountDate: null, refundableDepositsBdt: 330,
-  expectedBdt: 120, collectedBdt: 70, outstandingBdt: 50, overdueBdt: 200, overdueBills: 1, overdueTenants: 1, overdueSince: '2026-07', cashReceipts30dBdt: 50, expenses30dBdt: 10, issues: ['No physical cash count is recorded.'],
+  expectedBdt: 120, operatingReserveTargetBdt: 30, familyRestrictedCashBdt: 0, familyMonthlyProtectedOutflowBdt: 0, familyRunwayMonths: null, unclassifiedCashBdt: 0, allocationEligibleCashBdt: 1080, strategicDeployableBdt: 950, collectedBdt: 70, outstandingBdt: 50, overdueBdt: 200, overdueBills: 1, overdueTenants: 1, overdueSince: '2026-07', cashReceipts30dBdt: 50, expenses30dBdt: 10, issues: ['No physical cash count is recorded.'],
 }
 const stock: StockSnapshot = {
   fetchedAt: '2026-09-15T12:00:00.000Z', holdings: [{ symbol: 'XEQT', role: 'core', shares: 2, valueCad: null, priceSource: 'unavailable', asOf: null }],

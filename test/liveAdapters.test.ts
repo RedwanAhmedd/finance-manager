@@ -8,7 +8,11 @@ import { isStale } from '../src/live/models'
 const now = new Date('2026-09-15T12:00:00Z')
 function rentRaw(): RentRaw {
   return {
-    accounts: [{id:'bank',name:'Bank',account_type:'bank',balance_known:true,is_archived:false,opening_balance:20,opening_balance_as_of:'2026-07-31'}, {id:'card',name:'Card',account_type:'credit_card',balance_known:true,is_archived:false,opening_balance:-100,opening_balance_as_of:'2026-08-31'}],
+    accounts: [
+      {id:'bank',name:'Bank',account_type:'bank',balance_known:true,is_archived:false,opening_balance:20,opening_balance_as_of:'2026-07-31',financial_role:'corporate_operating',monthly_protected_outflow:0},
+      {id:'card',name:'Card',account_type:'credit_card',balance_known:true,is_archived:false,opening_balance:-100,opening_balance_as_of:'2026-08-31',financial_role:'personal',monthly_protected_outflow:0},
+    ],
+    treasury: [{id:'td',name:'TD Chequing',institution:'TD Canada Trust',country:'Canada',currency:'CAD',balance:159.93,balance_as_of:'2026-09-15',is_archived:false}],
     statements: [{id:'s',bank_account_id:'bank',statement_date:'2026-08-31',closing_balance:1000}],
     transactions: [{id:'t0',bank_account_id:'bank',txn_date:'2026-08-31',txn_type:'deposit',amount:999}, {id:'t1',bank_account_id:'bank',txn_date:'2026-09-01',txn_type:'deposit',amount:100}, {id:'t2',bank_account_id:'bank',txn_date:'2026-09-02',txn_type:'withdrawal',amount:40},{id:'t3',bank_account_id:'bank',txn_date:'2026-10-01',txn_type:'deposit',amount:4000}],
     payments: [{id:'bill',tenant_id:'tenant',payment_month:'2026-09-01',status:'partial',amount:100,utility_bill:20,amount_paid:70}],
@@ -32,6 +36,7 @@ describe('Live source accounting', () => {
   it('uses the latest statement and later dated movements, excluding same-day and future entries', () => {
     const r=normalizeRent(rentRaw(),now)
     expect(r.bankCashBdt).toBe(1060)
+    expect(r.treasuryCashCad).toBeCloseTo(159.93)
     expect(r.cardDebtBdt).toBe(100)
     expect(r.operatingCashBdt).toBe(80)
   })
@@ -67,6 +72,16 @@ describe('Live source accounting', () => {
     expect(r.overdueSince).toBe('2026-07')
     expect(r.issues.join(' ')).not.toContain('marked paid')
     expect(normalizeRent(rentRaw(),now)).toMatchObject({overdueBdt:0,overdueSince:null})
+  })
+  it('protects family-restricted cash and derives a three-month operating reserve', () => {
+    const raw=rentRaw()
+    raw.accounts.push({id:'family',name:'Family',account_type:'bank',balance_known:true,is_archived:false,opening_balance:300,opening_balance_as_of:'2026-09-01',financial_role:'family_restricted',monthly_protected_outflow:100})
+    const r=normalizeRent(raw,now)
+    expect(r.operatingReserveTargetBdt).toBe(30)
+    expect(r.familyRestrictedCashBdt).toBe(300)
+    expect(r.familyRunwayMonths).toBe(3)
+    expect(r.allocationEligibleCashBdt).toBe(1140)
+    expect(r.strategicDeployableBdt).toBe(1010)
   })
   it('does not treat unbilled tenants as zero expected income', () => {
     const raw=rentRaw();raw.payments=[]
@@ -141,7 +156,7 @@ describe('Read-only transport', () => {
   })
   it('reads the approved stable cash RPC by GET and pages past the default row limit', async () => {
     const raw=rentRaw();raw.entries=Array.from({length:1253},(_,i)=>({id:`e${i}`,payment_date:'2026-09-02',amount:1}))
-    const byTable: Record<string, unknown[]> = {bank_accounts:raw.accounts,bank_transactions:raw.transactions,bank_balance_statements:raw.statements,payments:raw.payments,payment_entries:raw.entries,expenses:raw.expenses,security_deposit_transactions:raw.deposits,tenants:raw.tenants,reconciliation_locks:raw.locks,'rpc/reconciliation_cash_source_balances':raw.cash,properties:[],manual_income:[],rent_history:[]}
+    const byTable: Record<string, unknown[]> = {bank_accounts:raw.accounts,treasury_accounts:raw.treasury ?? [],bank_transactions:raw.transactions,bank_balance_statements:raw.statements,payments:raw.payments,payment_entries:raw.entries,expenses:raw.expenses,security_deposit_transactions:raw.deposits,tenants:raw.tenants,reconciliation_locks:raw.locks,'rpc/reconciliation_cash_source_balances':raw.cash,properties:[],manual_income:[],rent_history:[]}
     const calls: string[]=[]
     const transport: typeof fetch = async (input,init) => {
       const u=new URL(String(input));const t=u.pathname.replace('/rest/v1/','');calls.push(t)
@@ -152,6 +167,8 @@ describe('Read-only transport', () => {
     const client=createClient('https://example.supabase.co','sb_publishable_test',{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:readOnlyFetch('RentStream','https://example.supabase.co',transport)}})
     const r=await new ReadOnlyRentStreamAdapter(client).getSnapshot(now)
     expect(r.cashReceipts30dBdt).toBe(1253)
+    expect(r.treasuryCashCad).toBeCloseTo(159.93)
+    expect(calls).toContain('treasury_accounts')
     expect(calls.filter(x=>x==='payment_entries')).toHaveLength(3)
     expect(calls).toContain('rpc/reconciliation_cash_source_balances')
   })

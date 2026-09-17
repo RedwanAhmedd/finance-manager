@@ -15,8 +15,8 @@ function raw(): RentRaw & RentDetail {
   const bill = (id: string, tenant: string, property: string, m: string, status: string, amount: number, utility: number, paid: number) =>
     ({ id, tenant_id: tenant, property_id: property, payment_month: `${m}-01`, status, amount, utility_bill: utility, amount_paid: paid })
   return {
-    accounts: [{ id: 'bank', name: 'Main', account_type: 'bank', balance_known: true, is_archived: false, opening_balance: 0, opening_balance_as_of: '2026-07-01' },
-      { id: 'card', name: 'Card', account_type: 'credit_card', balance_known: true, is_archived: false, opening_balance: -500, opening_balance_as_of: '2026-07-01' }],
+    accounts: [{ id: 'bank', name: 'Main', account_type: 'bank', balance_known: true, is_archived: false, opening_balance: 0, opening_balance_as_of: '2026-07-01', financial_role: 'corporate_operating', monthly_protected_outflow: 0 },
+      { id: 'card', name: 'Card', account_type: 'credit_card', balance_known: true, is_archived: false, opening_balance: -500, opening_balance_as_of: '2026-07-01', financial_role: 'unclassified', monthly_protected_outflow: 0 }],
     statements: [{ id: 's7', bank_account_id: 'bank', statement_date: '2026-07-31', closing_balance: 90000 }, { id: 's8', bank_account_id: 'bank', statement_date: '2026-08-31', closing_balance: 60000 }],
     transactions: [{ id: 'x', bank_account_id: 'bank', txn_date: '2026-09-10', txn_type: 'deposit', amount: 5000 }],
     payments: [
@@ -75,7 +75,8 @@ describe('RentStream books', () => {
   it('states the levers in the records without assuming market rents', () => {
     expect(books.opportunities.longUnchangedRent).toEqual({ years: 3, tenants: 1, monthlyRent: 10000 })
     expect(books.opportunities.relets).toEqual({ tenants: 2, withPreviousTenant: 1, rentUp: 1, rentSame: 0, rentDown: 0, monthlyRentChange: 500, averageVacantDays: 26, rentLostWhileVacant: 7800 })
-    expect(books.opportunities.reserve).toEqual({ latestCompleteExpenseMonth: '2026-08', oneMonthOperatingExpenses: 6500, cashAfterDebtAndReserve: 58000 })
+    // 30-day expenses to 17 Sep = 3000 (Sept salary), so the reserve is 9000; main account is corporate operating.
+    expect(books.opportunities.allocation).toEqual({ operatingReserveTarget: 9000, familyRestricted: 0, familyMonthlyOutflow: 0, unclassified: 0, allocationEligible: 65000, strategicDeployable: 55500 })
     expect(books.opportunities.latestCompleteSurplus).toEqual({ month: '2026-08', surplus: 11900 })
     const text = renderRentBooks(books)
     expect(text).toContain('By tenant deposits held: 1. North Building ৳43,300; 2. South Building ৳0.')

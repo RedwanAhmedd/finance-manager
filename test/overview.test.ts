@@ -5,8 +5,8 @@ import type { RentSnapshot, StockSnapshot } from '../src/live/models'
 
 const rate = { rate: 88, asOf: '2026-09-17', source: 'test rates' }
 const rent = {
-  bankCashBdt: 4_400_000, refundableDepositsBdt: 4_140_000, cardDebtBdt: 30_000,
-  books: { opportunities: { reserve: { oneMonthOperatingExpenses: 640_000, cashAfterDebtAndReserve: 3_730_000 }, latestCompleteSurplus: { month: '2026-08', surplus: 704_000 } } },
+  bankCashBdt: 4_400_000, refundableDepositsBdt: 4_140_000, cardDebtBdt: 30_000, familyRestrictedCashBdt: 730_000, operatingReserveTargetBdt: 1_900_000, strategicDeployableBdt: 1_700_000,
+  books: { opportunities: { latestCompleteSurplus: { month: '2026-08', surplus: 704_000 } } },
 } as unknown as RentSnapshot
 const stock = { portfolioCad: 3600, cashCad: 0, books: { goal: { averageMonthlyInvested: 1430 } } } as unknown as StockSnapshot
 
@@ -23,6 +23,8 @@ describe('Two-country overview', () => {
     expect(text).toContain('revolving, normally used as departing tenants\' final two months of rent')
     expect(text).not.toContain('Planned contribution')
     expect(text).not.toContain('wife')
+    expect(text).toContain('Family-restricted cash (kept for family use, not deployable): ৳730,000')
+    expect(text).toContain('three-month operating reserve (৳1,900,000 (≈ C$21,590.91))')
     expect(text).toContain('money actually transferred between countries gets a different rate')
   })
   it('says what is missing when a side is not read', () => {

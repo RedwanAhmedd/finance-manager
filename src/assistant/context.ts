@@ -78,7 +78,7 @@ export function assistantSummary(rent: RentSnapshot | null, stock: StockSnapshot
 // The document the assistant reads: the dashboard summary, then the full
 // books for each source that was read.
 export function assistantContext(rent: RentSnapshot | null, stock: StockSnapshot | null, fx: FxReference | null = null, money: (MoneyData & { suggestions?: SuggestedBill[] }) | null = null, now = new Date()): string {
-  const personal = money ? buildPersonalBooks(money, now) : null
+  const personal = money ? buildPersonalBooks(money, now, rent?.treasury ?? []) : null
   return [
     fx ? `# ${renderOverview(buildOverview(rent, stock, fx, personal)).slice(3)}` : '# Overview across both countries\nNo CAD/BDT reference rate is available, so the two sides cannot be compared in one currency.',
     `# Summary of both sources\n${JSON.stringify(assistantSummary(rent, stock, now), null, 1)}`,
