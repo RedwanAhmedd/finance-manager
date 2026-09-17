@@ -1,6 +1,6 @@
 # Finance Manager
 
-Finance Manager is a personal financial advisor across two countries: everyday money in Canada, the rental business in Bangladesh (**RentStream**) and investments (**StockStream**). Version 0.4 adds permanent server-side source connections, precomputed books for the assistant, a daily CAD/BDT reference rate, and personal bills, spending, balances and draws. **View demo** shows the same page on made-up records.
+Finance Manager is a personal financial advisor across two countries: everyday money in Canada, the rental business in Bangladesh (**RentStream**) and investments (**StockStream**). Version 0.4 adds permanent server-side source connections, precomputed books for the assistant, a daily CAD/BDT reference rate, and personal bills, spending, balances and draws.
 
 - **RentStream owns:** rental billing, receipts, expenses, reconciliation, Bangladesh bank/cash records with their financial roles, tenant deposit records, and treasury cash snapshots such as the owner's Canadian (TD) bank balances.
 - **StockStream owns:** holdings, trades, recorded brokerage cash, quotes, and investment settings.
@@ -76,9 +76,8 @@ Source reads stay GET-only. This is an application behavior constraint, **not a 
 - `src/books/`: RentStream, StockStream, personal and two-country overview books.
 - `src/money/`: personal money types, categorisation, statement lines and the Everyday money panel.
 - `src/integration/chatgptFacade.ts`: narrow read-only ChatGPT-facing context contract (see `docs/chatgpt-integration.md`).
-- `src/demo/sample.ts`: made-up records for **View demo**. The demo is the same page, built by the same normalisers and books, with a sample-data banner; nothing in it is saved.
 
-The live snapshot types represent missing values explicitly and therefore do not silently coerce the richer source data into the original demo contracts.
+The live snapshot types represent missing values explicitly and therefore do not silently coerce the richer source data into simpler shapes.
 
 ## Validation
 
