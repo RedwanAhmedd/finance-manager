@@ -15,7 +15,10 @@ export interface SourceHealth {
   fetchedAt: string | null
   stale: boolean
   issueCount: number
-  error: SourceFailure | null
+  /** Existing v1 string field retained for compatibility. */
+  error: string | null
+  /** Additive machine-readable failure category for future transports. */
+  errorCode: SourceFailureCode | null
 }
 
 export interface ChatGptFinanceContext {
@@ -42,6 +45,10 @@ export interface BuildChatGptFinanceContextInput {
   stock?: StockSnapshot | null
   rentFailure?: SourceFailure | null
   stockFailure?: SourceFailure | null
+  /** @deprecated Use rentFailure so the failure category is preserved. */
+  rentError?: string | null
+  /** @deprecated Use stockFailure so the failure category is preserved. */
+  stockError?: string | null
 }
 
 const SOURCE_STALE_MS = 60 * 60 * 1000
@@ -53,6 +60,10 @@ function isFetchStale(fetchedAt: string | null, now: Date): boolean {
   if (!Number.isFinite(fetchedMs)) return true
   const age = now.getTime() - fetchedMs
   return age > SOURCE_STALE_MS || age < -FUTURE_TOLERANCE_MS
+}
+
+function legacyFailure(source: FinanceSource, error: string | null | undefined): SourceFailure | null {
+  return error ? { code: 'SOURCE_ERROR', message: source + ' read failed.' } : null
 }
 
 function buildSourceHealth(
@@ -71,7 +82,8 @@ function buildSourceHealth(
     fetchedAt,
     stale,
     issueCount,
-    error: failure,
+    error: failure?.message ?? null,
+    errorCode: failure?.code ?? null,
   }
 }
 
@@ -92,8 +104,8 @@ export function buildChatGptFinanceContext(
 ): ChatGptFinanceContext {
   const rent = input.rent ?? null
   const stock = input.stock ?? null
-  const rentFailure = input.rentFailure ?? null
-  const stockFailure = input.stockFailure ?? null
+  const rentFailure = input.rentFailure ?? legacyFailure('RentStream', input.rentError)
+  const stockFailure = input.stockFailure ?? legacyFailure('StockStream', input.stockError)
 
   const rentHealth = buildSourceHealth('RentStream', rent, rentFailure, now)
   const stockHealth = buildSourceHealth('StockStream', stock, stockFailure, now)
