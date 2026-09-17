@@ -2,6 +2,12 @@ import type { RentSnapshot, StockSnapshot } from '../live/models'
 
 export type FinanceSource = 'RentStream' | 'StockStream'
 export type SourceHealthStatus = 'healthy' | 'attention' | 'unavailable'
+export type SourceFailureCode = 'AUTH_REQUIRED' | 'PERMISSION_DENIED' | 'NETWORK_ERROR' | 'SOURCE_ERROR'
+
+export interface SourceFailure {
+  code: SourceFailureCode
+  message: string
+}
 
 export interface SourceHealth {
   source: FinanceSource
@@ -9,7 +15,7 @@ export interface SourceHealth {
   fetchedAt: string | null
   stale: boolean
   issueCount: number
-  error: string | null
+  error: SourceFailure | null
 }
 
 export interface ChatGptFinanceContext {
@@ -34,8 +40,8 @@ export interface ChatGptFinanceContext {
 export interface BuildChatGptFinanceContextInput {
   rent?: RentSnapshot | null
   stock?: StockSnapshot | null
-  rentError?: string | null
-  stockError?: string | null
+  rentFailure?: SourceFailure | null
+  stockFailure?: SourceFailure | null
 }
 
 const SOURCE_STALE_MS = 60 * 60 * 1000
@@ -52,7 +58,7 @@ function isFetchStale(fetchedAt: string | null, now: Date): boolean {
 function buildSourceHealth(
   source: FinanceSource,
   snapshot: RentSnapshot | StockSnapshot | null,
-  error: string | null,
+  failure: SourceFailure | null,
   now: Date,
 ): SourceHealth {
   const fetchedAt = snapshot?.fetchedAt ?? null
@@ -61,11 +67,11 @@ function buildSourceHealth(
 
   return {
     source,
-    status: !snapshot || error ? 'unavailable' : stale || issueCount > 0 ? 'attention' : 'healthy',
+    status: !snapshot || failure ? 'unavailable' : stale || issueCount > 0 ? 'attention' : 'healthy',
     fetchedAt,
     stale,
     issueCount,
-    error,
+    error: failure,
   }
 }
 
@@ -86,17 +92,17 @@ export function buildChatGptFinanceContext(
 ): ChatGptFinanceContext {
   const rent = input.rent ?? null
   const stock = input.stock ?? null
-  const rentError = input.rentError ?? null
-  const stockError = input.stockError ?? null
+  const rentFailure = input.rentFailure ?? null
+  const stockFailure = input.stockFailure ?? null
 
-  const rentHealth = buildSourceHealth('RentStream', rent, rentError, now)
-  const stockHealth = buildSourceHealth('StockStream', stock, stockError, now)
+  const rentHealth = buildSourceHealth('RentStream', rent, rentFailure, now)
+  const stockHealth = buildSourceHealth('StockStream', stock, stockFailure, now)
 
   const attention = unique([
-    ...(rentError ? [`RentStream unavailable: ${rentError}`] : []),
-    ...(stockError ? [`StockStream unavailable: ${stockError}`] : []),
-    ...(!rent && !rentError ? ['RentStream snapshot unavailable.'] : []),
-    ...(!stock && !stockError ? ['StockStream snapshot unavailable.'] : []),
+    ...(rentFailure ? [`RentStream unavailable: ${rentFailure.message}`] : []),
+    ...(stockFailure ? [`StockStream unavailable: ${stockFailure.message}`] : []),
+    ...(!rent && !rentFailure ? ['RentStream snapshot unavailable.'] : []),
+    ...(!stock && !stockFailure ? ['StockStream snapshot unavailable.'] : []),
     ...(rentHealth.stale && rent ? [`RentStream read is stale (last fetch ${rent.fetchedAt}).`] : []),
     ...(stockHealth.stale && stock ? [`StockStream read is stale (last fetch ${stock.fetchedAt}).`] : []),
     ...(rent?.issues.map(issue => `RentStream: ${issue}`) ?? []),
