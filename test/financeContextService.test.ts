@@ -68,10 +68,8 @@ describe('getFinanceContext', () => {
 
     expect(context.rent).toBeNull()
     expect(context.stock).toBe(stock)
-    expect(context.sourceHealth.rentStream.error).toEqual({
-      code: 'AUTH_REQUIRED',
-      message: 'RentStream authentication is required.',
-    })
+    expect(context.sourceHealth.rentStream.error).toBe('RentStream authentication is required.')
+    expect(context.sourceHealth.rentStream.errorCode).toBe('AUTH_REQUIRED')
     expect(JSON.stringify(context)).not.toContain('secret token abc')
     expect(context.attention).toContain('RentStream unavailable: RentStream authentication is required.')
   })
@@ -92,14 +90,10 @@ describe('getFinanceContext', () => {
 
     expect(context.rent).toBeNull()
     expect(context.stock).toBeNull()
-    expect(context.sourceHealth.rentStream.error).toEqual({
-      code: 'PERMISSION_DENIED',
-      message: 'RentStream access was denied.',
-    })
-    expect(context.sourceHealth.stockStream.error).toEqual({
-      code: 'NETWORK_ERROR',
-      message: 'StockStream could not be reached.',
-    })
+    expect(context.sourceHealth.rentStream.error).toBe('RentStream access was denied.')
+    expect(context.sourceHealth.rentStream.errorCode).toBe('PERMISSION_DENIED')
+    expect(context.sourceHealth.stockStream.error).toBe('StockStream could not be reached.')
+    expect(context.sourceHealth.stockStream.errorCode).toBe('NETWORK_ERROR')
     expect(context.attention).toEqual([
       'RentStream unavailable: RentStream access was denied.',
       'StockStream unavailable: StockStream could not be reached.',
