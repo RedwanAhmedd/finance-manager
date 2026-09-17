@@ -9,7 +9,7 @@ import { MetricCard } from '../components/MetricCard'
 import { ReadOnlyRentStreamAdapter } from './rentstream'
 import { ReadOnlyStockStreamAdapter } from './stockstream'
 import { useSnapshot } from './useSnapshot'
-import { isStale, type BankFinancialRole, type RentSnapshot, type StockSnapshot } from './models'
+import { isStale, type RentSnapshot, type StockSnapshot } from './models'
 
 const rentAdapter = clients.RentStream ? new ReadOnlyRentStreamAdapter(clients.RentStream) : null
 const stockAdapter = clients.StockStream ? new ReadOnlyStockStreamAdapter(clients.StockStream) : null
@@ -40,37 +40,6 @@ function PermanentConnection({ source }: { source: string }) {
   return <article className="panel connection"><div className="panel-heading"><h2>{source}</h2><span className="system-tag">CONNECTED</span></div><p className="muted small">Connected permanently through this Mac's local server. No sign-in needed; figures refresh every hour or when you press Refresh.</p></article>
 }
 
-const roleLabel: Record<BankFinancialRole, string> = {
-  corporate_operating: 'Business operating',
-  savings: 'Savings',
-  family_restricted: 'Family money',
-  personal: 'Personal',
-  unclassified: 'Purpose not set',
-}
-
-function RentView({ rent }: {rent: RentSnapshot}) {
-  const treasury = rent.treasury ?? []
-  return <article className="panel">
-    <div className="panel-heading"><div><div className="eyebrow">RentStream · {rent.month}</div><h2>Rent and bank accounts</h2></div><span className="system-tag">BDT</span></div>
-    <div className="mini-grid">
-      <div><span>Billed rent + utilities</span><strong>{bdt(rent.expectedBdt)}</strong></div>
-      <div><span>Settled against this month's bills</span><strong>{bdt(rent.collectedBdt)}</strong></div>
-      <div><span>Unpaid from this month's bills</span><strong>{bdt(rent.outstandingBdt)}</strong></div>
-      <div><span>Overdue from earlier months{rent.overdueSince ? ` · since ${rent.overdueSince}` : ''}</span><strong>{bdt(rent.overdueBdt)}</strong></div>
-      <div><span>Total owed by tenants · rent + utilities</span><strong>{bdt(rent.outstandingBdt + rent.overdueBdt)}</strong></div>
-      <div><span>Cash rent receipts · last 30 days</span><strong>{bdt(rent.cashReceipts30dBdt)}</strong></div>
-      <div><span>Recorded expenses · last 30 days</span><strong>{bdt(rent.expenses30dBdt)}</strong></div>
-      <div><span>Tenant deposits held</span><strong>{bdt(rent.refundableDepositsBdt)}</strong></div>
-    </div>
-    <p className="muted small">Tenant deposits revolve: departing tenants normally use theirs as their final two months of rent, and new tenants bring new deposits. Bill settlements can include deposit applications; cash receipts are shown separately.</p>
-    <div className="account-list">{rent.banks.map(b => <div className="account-row" key={b.id}><div><strong>{b.name}</strong><div className="muted">{b.type === 'credit_card' ? 'Credit card · excluded from liquid cash' : roleLabel[b.financialRole]} · statement anchor {b.anchorDate ?? 'unknown'}</div>{b.monthlyProtectedOutflow > 0 && <div className="muted small">Protected monthly outflow {bdt(b.monthlyProtectedOutflow)}</div>}</div><div className="right"><strong>{bdt(b.balance)}</strong><div className="muted">{b.type === 'credit_card' ? 'signed card balance' : 'statement + later movements'}</div></div></div>)}</div>
-    {treasury.length > 0 && <>
-      <div className="eyebrow" style={{marginTop:'1rem'}}>Canadian bank accounts</div>
-      <div className="account-list">{treasury.map(a => <div className="account-row" key={a.id}><div><strong>{a.name}</strong><div className="muted">{a.institution ?? a.country} · balance snapshot {a.balanceAsOf}</div></div><div className="right"><strong>{a.currency === 'CAD' ? cad(a.balance) : bdt(a.balance)}</strong><div className="muted">{a.currency}</div></div></div>)}</div>
-    </>}
-    <p className="muted small">Ledger cash through {rent.businessDate}. Last physical count: {rent.cashCountDate ?? 'not recorded'}.</p>
-  </article>
-}
 
 function CapitalView({rent, stock}: {rent: RentSnapshot; stock: StockSnapshot | null}) {
   const surplus30d = rent.cashReceipts30dBdt - rent.expenses30dBdt
@@ -90,19 +59,6 @@ function CapitalView({rent, stock}: {rent: RentSnapshot; stock: StockSnapshot | 
       <div className="attention-row">Unclassified BDT cash held out of allocation: <strong>{bdt(rent.unclassifiedCashBdt)}</strong>.</div>
       <div className="attention-row">Core portfolio share: <strong>{stock?.corePct == null ? 'Unknown' : `${stock.corePct.toFixed(1)}%`}</strong>.</div>
     </div>
-  </article>
-}
-function StockView({stock}: {stock: StockSnapshot}) {
-  return <article className="panel">
-    <div className="panel-heading"><div><div className="eyebrow">StockStream</div><h2>Investment holdings</h2></div><span className="system-tag">CAD</span></div>
-    <div className="mini-grid">
-      <div><span>Portfolio · includes recorded cash</span><strong>{cad(stock.portfolioCad)}</strong></div>
-      <div><span>Invested holdings</span><strong>{cad(stock.investedCad)}</strong></div>
-      <div><span>Core share of portfolio</span><strong>{stock.corePct === null ? 'Unknown' : `${stock.corePct.toFixed(1)}%`}</strong></div>
-      <div><span>Recorded YTD contributions</span><strong>{cad(stock.contributedYtdCad)}</strong></div>
-    </div>
-    <div className="holdings-table-wrap"><table className="holdings-table"><thead><tr><th>Holding</th><th>Value (CAD)</th><th>Price basis / date</th></tr></thead><tbody>{stock.holdings.map(h => <tr key={h.symbol}><td><strong>{h.symbol}</strong><div className="muted small">{h.shares.toLocaleString(undefined,{maximumFractionDigits:6})} · {h.role}</div></td><td>{cad(h.valueCad)}</td><td>{h.priceSource}<div className="muted small">{h.asOf?.slice(0,10) ?? 'unknown'}</div></td></tr>)}</tbody></table></div>
-    <p className="muted small">Holdings with a trade history use the remaining shares from that history. Receipt prices preserve their source labels. USD holdings use StockStream's dated USD/CAD rate.</p>
   </article>
 }
 
@@ -145,8 +101,6 @@ export default function LiveDashboard() {
   }, [permanent, refreshRent, refreshStock])
   const rent = r.data, stock = s.data
   const reading = r.loading || s.loading
-  const cashBdt = rent?.bankCashBdt != null && rent.operatingCashBdt !== null ? rent.bankCashBdt + rent.operatingCashBdt + (rent.treasuryCashBdt ?? 0) : null
-  const cashCad = rent?.treasuryCashCad
   const issues = [...(rent?.issues ?? []), ...(stock?.issues ?? [])]
   const snapshotStale = [rent?.fetchedAt, stock?.fetchedAt].some(t => t && isStale(t, now, 1/24))
   const personal = useMemo(() => money ? buildPersonalBooks(money, now, rent?.treasury ?? []) : null, [money, now, rent])
@@ -169,14 +123,6 @@ export default function LiveDashboard() {
     <AssistantPanel rent={rent} stock={stock} fx={fx} money={money} reading={reading} />
     <EverydayMoney money={money} treasury={rent?.treasury ?? []} error={moneyError} onChanged={loadMoney} />
 
-    <details className="section-fold">
-      <summary><span>Rental business in Bangladesh</span><span className="muted small">{rent ? `${bdt(rent.bankCashBdt)} in the bank · ${bdt(rent.outstandingBdt)} rent still to collect this month` : 'Not read yet'}</span></summary>
-      {rent ? <RentView rent={rent} /> : <p className="muted">{r.loading ? 'Reading RentStream…' : 'RentStream is not connected.'}</p>}
-    </details>
-    <details className="section-fold">
-      <summary><span>Investments</span><span className="muted small">{stock ? `${cad(stock.portfolioCad)} portfolio` : 'Not read yet'}</span></summary>
-      {stock ? <StockView stock={stock} /> : <p className="muted">{s.loading ? 'Reading StockStream…' : 'StockStream is not connected.'}</p>}
-    </details>
     <details className="section-fold">
       <summary><span>How "free to invest" is worked out</span><span className="muted small">Reserves, family money and the rules</span></summary>
       {rent ? <section className="two-col"><CapitalView rent={rent} stock={stock ?? null} /><article className="panel"><div className="eyebrow">The rules</div><h2>Money gets a job before it gets invested</h2><ol className="input-gaps"><li>Keep three months of the business's recorded costs.</li><li>Keep family money out of what can be invested.</li><li>Leave out accounts whose purpose isn't set yet.</li><li>Only put money into a single stock when StockStream's Strike Radar clears it on its own.</li><li>Nothing moves money or makes a trade without your approval.</li></ol><p className="muted small">New surplus, once the rules above are met, splits 50% core / 25% strike reserve / 15% flexible / 10% free. Money already saved is not swept into that split automatically.</p></article></section> : <p className="muted">Needs RentStream.</p>}
