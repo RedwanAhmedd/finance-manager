@@ -43,6 +43,7 @@ Turns user intent into read-only questions/scenarios, explains Finance Manager r
 - The live UI keeps independent source sessions, explicitly represents unknown data, clears failed reads, and rejects non-allowlisted source writes in its transport layer.
 - Live-source freshness and source issues are surfaced instead of replaced with demo assumptions.
 - `src/integration/chatgptFacade.ts` defines a transport-neutral `finance-manager.chatgpt.v1` envelope for ChatGPT-facing reads.
+- `src/integration/financeContextService.ts` reads both live adapters concurrently, isolates partial failures, and emits stable non-sensitive source failures.
 - The facade exposes source health, source snapshots and attention items with hard-coded read-only capabilities: no money movement, no trade execution, no source writes and no autonomous approvals.
 - Missing or failed sources remain unavailable; they are never interpreted as zero.
 
