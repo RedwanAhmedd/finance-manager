@@ -47,6 +47,9 @@ describe('Personal books', () => {
   it('summarises bills, draws, balances and review work', () => {
     expect(books.bills).toMatchObject({ monthlyTotal: 1718.99, subscriptionsMonthly: 18.99, subscriptionsCount: 1, dueLaterThisMonth: [{ name: 'Netflix', amount: 18.99, dueDay: 20 }] })
     expect(books.bills.active.map(b => b.name)).toEqual(['Rent', 'Car insurance', 'Netflix'])
+    // 17 Sep to 17 Oct: Netflix on 20 Sep and 1 Oct rent; the yearly bill has no due date.
+    expect(books.bills.dueNext30Days).toEqual([{ name: 'Netflix', amount: 18.99, date: '2026-09-20' }, { name: 'Rent', amount: 1600, date: '2026-10-01' }])
+    expect(books.bills.dueNext30DaysTotal).toBe(1618.99)
     expect(books.draws).toEqual([{ date: '2026-09-05', cad: 2000, bdt: 176000 }])
     // Canadian balances come from RentStream treasury accounts; BDT treasury is not personal Canadian cash.
     expect(books.balances).toEqual([{ account: 'td_chequing', balance: 3600, date: '2026-09-02', source: 'statement' }, { account: 'TD Every Day Savings Account', balance: 337.04, date: '2026-09-16', source: 'rentstream' }])

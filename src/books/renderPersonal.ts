@@ -37,6 +37,7 @@ ${b.topMerchants.rows.map((r, i) => `${i + 1}. ${r.merchant} ${cad(r.spent)} (${
   sections.push(`### Recorded bills
 ${bills.active.length ? table(['Bill', 'Category', 'Amount', 'Cadence', 'Due day', 'Monthly equivalent'], bills.active.map(x => [x.name, words(x.category), cad(x.amount), x.cadence, x.dueDay ?? '—', cad(x.monthly)])) : 'No bills recorded.'}
 All bills: ${cad(bills.monthlyTotal)} a month. Subscriptions: ${bills.subscriptionsCount}, ${cad(bills.subscriptionsMonthly)} a month.
+Monthly bills due in the next 30 days (by recorded due day): ${bills.dueNext30Days.map(x => `${x.name} ${cad(x.amount)} on ${x.date}`).join('; ') || 'none'}; total ${cad(bills.dueNext30DaysTotal)}.
 Monthly bills still due later this month (by recorded due day): ${bills.dueLaterThisMonth.map(x => `${x.name} ${cad(x.amount)} on day ${x.dueDay}`).join('; ') || 'none'}.
 Charges that repeat monthly but are not recorded as bills (suggestions): ${bills.suggested.map(s => `${s.name} ${cad(s.amount)} (${s.months.length} months)`).join('; ') || 'none'}.`)
 

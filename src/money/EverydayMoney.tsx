@@ -8,7 +8,7 @@ import type { TreasuryBalance } from '../live/models'
 export type MoneyState = (MoneyData & { suggestions: SuggestedBill[] }) | null
 type View = 'month' | 'log' | 'bills' | 'review' | 'import' | 'draws'
 
-const cad = (n: number | null | undefined) => n == null ? '—' : new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(n)
+const cad = (n: number | null | undefined) => n == null ? '—' : `${n < 0 ? '−' : ''}C$${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const label = (ym: string) => new Date(`${ym}-01T00:00:00Z`).toLocaleString('en-CA', { month: 'short', year: 'numeric', timeZone: 'UTC' })
 const words = (s: string) => s.replace('_', ' / ')
 

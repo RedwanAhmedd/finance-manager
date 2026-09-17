@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { clients } from './client'
 import Connection from './Connections'
-import { SafetyBanner } from '../components/SafetyBanner'
 import AssistantPanel from '../assistant/AssistantPanel'
 import type { FxReference } from '../books/overview'
 import EverydayMoney, { type MoneyState } from '../money/EverydayMoney'
+import { buildPersonalBooks } from '../books/personal'
 import { sampleFx, sampleMoney, sampleRent, sampleStock } from '../demo/sample'
 import { MetricCard } from '../components/MetricCard'
 import { ReadOnlyRentStreamAdapter } from './rentstream'
@@ -38,7 +38,7 @@ const bdt = (n: number | null | undefined) => {
   const hasPoisha = !Number.isInteger(Math.round(n * 100) / 100)
   return `৳${n.toLocaleString('en-IN', {minimumFractionDigits: hasPoisha ? 2 : 0, maximumFractionDigits: hasPoisha ? 2 : 0})}`
 }
-const cad = (n: number | null | undefined) => n == null ? 'Unknown' : new Intl.NumberFormat('en-CA', {style:'currency', currency:'CAD', maximumFractionDigits:2}).format(n)
+const cad = (n: number | null | undefined) => n == null ? 'Unknown' : `${n < 0 ? '−' : ''}C$${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const date = (s: string | null | undefined) => s ? new Date(s).toLocaleString() : 'Not recorded'
 
 function PermanentConnection({ source }: { source: string }) {
@@ -46,17 +46,17 @@ function PermanentConnection({ source }: { source: string }) {
 }
 
 const roleLabel: Record<BankFinancialRole, string> = {
-  corporate_operating: 'Corporate operating',
+  corporate_operating: 'Business operating',
   savings: 'Savings',
-  family_restricted: 'Family-restricted',
+  family_restricted: 'Family money',
   personal: 'Personal',
-  unclassified: 'Unclassified',
+  unclassified: 'Purpose not set',
 }
 
 function RentView({ rent }: {rent: RentSnapshot}) {
   const treasury = rent.treasury ?? []
   return <article className="panel">
-    <div className="panel-heading"><div><div className="eyebrow">RentStream · {rent.month}</div><h2>Income & treasury</h2></div><span className="system-tag">BDT</span></div>
+    <div className="panel-heading"><div><div className="eyebrow">RentStream · {rent.month}</div><h2>Rent and bank accounts</h2></div><span className="system-tag">BDT</span></div>
     <div className="mini-grid">
       <div><span>Billed rent + utilities</span><strong>{bdt(rent.expectedBdt)}</strong></div>
       <div><span>Settled against this month's bills</span><strong>{bdt(rent.collectedBdt)}</strong></div>
@@ -70,7 +70,7 @@ function RentView({ rent }: {rent: RentSnapshot}) {
     <p className="muted small">Tenant deposits revolve: departing tenants normally use theirs as their final two months of rent, and new tenants bring new deposits. Bill settlements can include deposit applications; cash receipts are shown separately.</p>
     <div className="account-list">{rent.banks.map(b => <div className="account-row" key={b.id}><div><strong>{b.name}</strong><div className="muted">{b.type === 'credit_card' ? 'Credit card · excluded from liquid cash' : roleLabel[b.financialRole]} · statement anchor {b.anchorDate ?? 'unknown'}</div>{b.monthlyProtectedOutflow > 0 && <div className="muted small">Protected monthly outflow {bdt(b.monthlyProtectedOutflow)}</div>}</div><div className="right"><strong>{bdt(b.balance)}</strong><div className="muted">{b.type === 'credit_card' ? 'signed card balance' : 'statement + later movements'}</div></div></div>)}</div>
     {treasury.length > 0 && <>
-      <div className="eyebrow" style={{marginTop:'1rem'}}>Treasury accounts</div>
+      <div className="eyebrow" style={{marginTop:'1rem'}}>Canadian bank accounts</div>
       <div className="account-list">{treasury.map(a => <div className="account-row" key={a.id}><div><strong>{a.name}</strong><div className="muted">{a.institution ?? a.country} · balance snapshot {a.balanceAsOf}</div></div><div className="right"><strong>{a.currency === 'CAD' ? cad(a.balance) : bdt(a.balance)}</strong><div className="muted">{a.currency}</div></div></div>)}</div>
     </>}
     <p className="muted small">Ledger cash through {rent.businessDate}. Last physical count: {rent.cashCountDate ?? 'not recorded'}.</p>
@@ -80,14 +80,14 @@ function RentView({ rent }: {rent: RentSnapshot}) {
 function CapitalView({rent, stock}: {rent: RentSnapshot; stock: StockSnapshot | null}) {
   const surplus30d = rent.cashReceipts30dBdt - rent.expenses30dBdt
   return <article className="panel">
-    <div className="panel-heading"><div><div className="eyebrow">Capital allocation</div><h2>What can actually be deployed</h2></div><span className="system-tag">policy</span></div>
+    <div className="panel-heading"><div><div className="eyebrow">Business money</div><h2>What is free to invest</h2></div><span className="system-tag">policy</span></div>
     <div className="mini-grid">
-      <div><span>3-month operating reserve target</span><strong>{bdt(rent.operatingReserveTargetBdt)}</strong></div>
-      <div><span>Allocation-eligible BDT cash</span><strong>{bdt(rent.allocationEligibleCashBdt)}</strong></div>
-      <div><span>Strategic deployable BDT</span><strong>{bdt(rent.strategicDeployableBdt)}</strong></div>
-      <div><span>Family-restricted cash</span><strong>{bdt(rent.familyRestrictedCashBdt)}</strong></div>
-      <div><span>Protected family outflow / month</span><strong>{bdt(rent.familyMonthlyProtectedOutflowBdt)}</strong></div>
-      <div><span>Family cash runway</span><strong>{rent.familyRunwayMonths == null ? 'N/A' : `${rent.familyRunwayMonths.toFixed(1)} months`}</strong></div>
+      <div><span>Kept for 3 months of costs</span><strong>{bdt(rent.operatingReserveTargetBdt)}</strong></div>
+      <div><span>Business cash that can be used</span><strong>{bdt(rent.allocationEligibleCashBdt)}</strong></div>
+      <div><span>Free to invest</span><strong>{bdt(rent.strategicDeployableBdt)}</strong></div>
+      <div><span>Family money (kept aside)</span><strong>{bdt(rent.familyRestrictedCashBdt)}</strong></div>
+      <div><span>Family spending per month</span><strong>{bdt(rent.familyMonthlyProtectedOutflowBdt)}</strong></div>
+      <div><span>Family money lasts</span><strong>{rent.familyRunwayMonths == null ? 'N/A' : `${rent.familyRunwayMonths.toFixed(1)} months`}</strong></div>
     </div>
     <p className="muted small">The operating reserve is three times RentStream's trailing 30-day expenses. Family-restricted and unclassified accounts are excluded from deployable capital. Tenant deposits revolve (departing tenants use them as their final rent) and are not deducted.</p>
     <div className="attention-list">
@@ -156,33 +156,55 @@ export default function LiveDashboard({ demo, onToggleDemo }: { demo: boolean; o
   const cashCad = rent?.treasuryCashCad
   const issues = [...(rent?.issues ?? []), ...(stock?.issues ?? [])]
   const snapshotStale = [rent?.fetchedAt, stock?.fetchedAt].some(t => t && isStale(t, now, 1/24))
+  const personal = useMemo(() => money ? buildPersonalBooks(money, now, rent?.treasury ?? []) : null, [money, now, rent])
+  const canadianAccounts = (rent?.treasury ?? []).filter(a => a.currency === 'CAD')
+  const nextBills = personal?.bills.dueNext30Days ?? []
+  const needsSetup = !demo && permanent !== null && (!(permanent.rentstream || rentUser) || !(permanent.stockstream || stockUser))
   return <main className="shell">
-    <header className="topbar"><div><div className="brand">FINANCE MANAGER</div><div className="muted">Your everyday money, rental business and investments · v0.4</div></div><button onClick={onToggleDemo}>{demo ? 'Back to my finances' : 'View demo'}</button></header>
-    {demo && <div className="safety-banner demo-banner" role="status"><strong>Demo · sample data</strong><span>Everything on this page is made up. Nothing here is your finances, and nothing you do in the demo is saved.</span></div>}
-    <SafetyBanner />
-    <section className="hero panel"><div><div className="eyebrow">{demo ? 'Sample data' : reading ? 'Refreshing source records' : rent && stock ? 'Live source reads' : 'Connect your sources'}</div><h1>Your financial picture, together.</h1><p className="muted">Balances come from RentStream and StockStream. Their record dates remain visible; fetching a record does not make an old balance current.</p></div><span className="status status-watch">{reading ? 'Reading' : rent && stock ? 'Review data gaps' : 'Setup'}</span></section>
-    {!demo && permanent && <details className="connections" open={!(permanent.rentstream || rentUser) || !(permanent.stockstream || stockUser)}><summary>Source connections</summary><section className="two-col">
-      {permanent.rentstream ? <PermanentConnection source="RentStream" /> : <Connection source="RentStream" client={clients.RentStream} onSession={rentSession} />}
-      {permanent.stockstream ? <PermanentConnection source="StockStream" /> : <Connection source="StockStream" client={clients.StockStream} onSession={stockSession} />}
-    </section></details>}
-    <div className="refresh-row"><p className="muted small">RentStream read: {date(rent?.fetchedAt)}<br/>StockStream read: {date(stock?.fetchedAt)}<br/>CAD/BDT reference: {fx ? `1 CAD = ৳${fx.rate.toFixed(2)} · ${fx.asOf} · ${fx.source}` : 'not available'}</p><button onClick={() => {r.refresh(); s.refresh()}} disabled={r.loading || s.loading || (!r.data && !s.data && !r.error && !s.error)}>{r.loading || s.loading ? 'Reading sources…' : 'Refresh source data'}</button></div>
-    {r.error && <p className="panel error" role="alert">RentStream read failed: {r.error}. Its figures have been cleared.</p>}
-    {s.error && <p className="panel error" role="alert">StockStream read failed: {s.error}. Its figures have been cleared.</p>}
-    {snapshotStale && <p className="safety-banner" role="status">This snapshot is more than one hour old. Refresh before using its figures.</p>}
+    <header className="topbar">
+      <div className="brand">FINANCE MANAGER</div>
+      <div className="mode-toggle" role="tablist" aria-label="Which finances">
+        <button role="tab" aria-selected={!demo} className={demo ? '' : 'active'} onClick={() => demo && onToggleDemo()}>My finances</button>
+        <button role="tab" aria-selected={demo} className={demo ? 'active' : ''} onClick={() => !demo && onToggleDemo()}>Demo</button>
+      </div>
+    </header>
+    {demo && <div className="safety-banner demo-banner" role="status"><strong>Demo · sample data</strong><span>Everything here is made up, and nothing you do in the demo is saved.</span></div>}
+    {r.error && <p className="panel error" role="alert">Could not read RentStream: {r.error}</p>}
+    {s.error && <p className="panel error" role="alert">Could not read StockStream: {s.error}</p>}
+    {snapshotStale && <p className="safety-banner" role="status">These figures are more than an hour old. Open "Connections and data checks" and refresh.</p>}
+
+    <section className="metrics-grid summary-grid">
+      <MetricCard label="Cash in Canada" value={!rent && r.loading ? '…' : cad(rent?.treasuryCashCad)} note={canadianAccounts.length ? `${canadianAccounts.length} account${canadianAccounts.length === 1 ? '' : 's'} · as of ${canadianAccounts.map(a => a.balanceAsOf).sort()[0]}` : reading ? 'Reading…' : 'No Canadian account recorded'} />
+      <MetricCard label="Bills in the next 30 days" value={personal ? cad(personal.bills.dueNext30DaysTotal) : '…'} note={nextBills.length ? nextBills.slice(0, 3).map(b => `${b.name} ${new Date(`${b.date}T00:00:00Z`).toLocaleDateString('en-CA', { day: 'numeric', month: 'short', timeZone: 'UTC' })}`).join(' · ') : 'No bills due'} tone={personal && rent?.treasuryCashCad != null && personal.bills.dueNext30DaysTotal > rent.treasuryCashCad ? 'warn' : undefined} />
+      <MetricCard label="Spent this month" value={personal ? cad(personal.pace.thisMonth) : '…'} note={personal?.recordsSince ? `Last month by today: ${cad(personal.pace.lastMonthSameDay)}` : 'Log spending to see this'} />
+      <MetricCard label="Business money free to invest" value={!rent && r.loading ? '…' : bdt(rent?.strategicDeployableBdt)} note={rent?.strategicDeployableBdt != null && fx ? `≈ ${cad(rent.strategicDeployableBdt / fx.rate)} · after card debt, 3 months of costs and family money` : 'After card debt, 3 months of costs and family money'} />
+    </section>
+
     <AssistantPanel rent={rent} stock={stock} fx={fx} money={money} reading={reading} />
     <EverydayMoney money={money} treasury={rent?.treasury ?? []} error={moneyError} onChanged={loadMoney} readOnly={demo} />
-    <section className="metrics-grid">
-      <MetricCard label="Recorded cash · Bangladesh" value={bdt(cashBdt)} note="All BDT bank balances + operating cash; family-restricted and unclassified cash are separated below" />
-      <MetricCard label="Strategic deployable · BDT" value={bdt(rent?.strategicDeployableBdt)} note="After card debt and 3 months of recorded expenses; excludes family-restricted and unclassified accounts" />
-      <MetricCard label="Recorded cash · Canada" value={cad(cashCad)} note={rent?.treasury?.some(a => a.currency === 'CAD') ? `TD balances · ${rent.treasury.filter(a => a.currency === 'CAD').map(a => a.balanceAsOf).sort().at(0) ?? 'date unknown'}` : 'No Canadian account connected'} />
-      <MetricCard label="Brokerage cash · recorded" value={cad(stock?.cashCad)} note={stock?.cashAsOf ? `Record ${stock.cashAsOf.slice(0,10)}${isStale(stock.cashAsOf,now) ? ' · STALE' : ''}` : 'Connect StockStream to read its cash position'} tone={stock && isStale(stock.cashAsOf,now) ? 'warn' : undefined} />
-      <MetricCard label="Credit-card debt" value={bdt(rent?.cardDebtBdt)} note="Amount owed; kept separate from liquid cash" />
-    </section>
-    <section className="two-col">{rent ? <RentView rent={rent} /> : <article className="panel"><h2>RentStream</h2><p className="muted">{r.loading ? 'Reading accounts and reconciliation…' : 'Connect RentStream to see actual income and treasury data.'}</p></article>}{stock ? <StockView stock={stock}/> : <article className="panel"><h2>StockStream</h2><p className="muted">{s.loading ? 'Reading holdings and quotes…' : 'Connect StockStream to see actual investments.'}</p></article>}</section>
-    {rent && <section className="two-col"><CapitalView rent={rent} stock={stock ?? null} /><article className="panel"><div className="eyebrow">Allocation rules</div><h2>Money gets a job before it gets invested</h2><ol className="input-gaps"><li>Protect three months of RentStream-recorded expenses.</li><li>Keep family-restricted cash out of personal deployable capital.</li><li>Exclude unclassified accounts until their role is confirmed.</li><li>Use Strike capital only when StockStream/Strike Radar independently clears its investment gates.</li><li>No recommendation moves money or executes a trade without explicit approval.</li></ol><p className="muted small">The 50% core / 25% strike reserve / 15% flexible / 10% free split applies to new surplus after the protection rules above are satisfied. Existing accumulated cash is not automatically swept into that split.</p></article></section>}
-    <section>
-      <article className="panel"><div className="eyebrow">Source evidence</div><h2>What needs attention</h2><div className="attention-list">{issues.length ? issues.map((issue,i) => <div className="attention-row" key={i}>{issue}</div>) : <p className="muted">Connect your sources to inspect data coverage and freshness.</p>}</div></article>
-    </section>
-    <footer>Finance Manager v0.4 · reads your sources and keeps your personal records · no transfers, payments or trades</footer>
+
+    <details className="section-fold">
+      <summary><span>Rental business in Bangladesh</span><span className="muted small">{rent ? `${bdt(rent.bankCashBdt)} in the bank · ${bdt(rent.outstandingBdt)} rent still to collect this month` : 'Not read yet'}</span></summary>
+      {rent ? <RentView rent={rent} /> : <p className="muted">{r.loading ? 'Reading RentStream…' : 'RentStream is not connected.'}</p>}
+    </details>
+    <details className="section-fold">
+      <summary><span>Investments</span><span className="muted small">{stock ? `${cad(stock.portfolioCad)} portfolio` : 'Not read yet'}</span></summary>
+      {stock ? <StockView stock={stock} /> : <p className="muted">{s.loading ? 'Reading StockStream…' : 'StockStream is not connected.'}</p>}
+    </details>
+    <details className="section-fold">
+      <summary><span>How "free to invest" is worked out</span><span className="muted small">Reserves, family money and the rules</span></summary>
+      {rent ? <section className="two-col"><CapitalView rent={rent} stock={stock ?? null} /><article className="panel"><div className="eyebrow">The rules</div><h2>Money gets a job before it gets invested</h2><ol className="input-gaps"><li>Keep three months of the business's recorded costs.</li><li>Keep family money out of what can be invested.</li><li>Leave out accounts whose purpose isn't set yet.</li><li>Only put money into a single stock when StockStream's Strike Radar clears it on its own.</li><li>Nothing moves money or makes a trade without your approval.</li></ol><p className="muted small">New surplus, once the rules above are met, splits 50% core / 25% strike reserve / 15% flexible / 10% free. Money already saved is not swept into that split automatically.</p></article></section> : <p className="muted">Needs RentStream.</p>}
+    </details>
+    <details className="section-fold" open={needsSetup}>
+      <summary><span>Connections and data checks</span><span className="muted small">{issues.length ? `${issues.length} note${issues.length === 1 ? '' : 's'}` : 'All clear'}</span></summary>
+      {!demo && permanent && <section className="two-col">
+        {permanent.rentstream ? <PermanentConnection source="RentStream" /> : <Connection source="RentStream" client={clients.RentStream} onSession={rentSession} />}
+        {permanent.stockstream ? <PermanentConnection source="StockStream" /> : <Connection source="StockStream" client={clients.StockStream} onSession={stockSession} />}
+      </section>}
+      <div className="refresh-row"><p className="muted small">RentStream read: {date(rent?.fetchedAt)}<br/>StockStream read: {date(stock?.fetchedAt)}<br/>Exchange rate: {fx ? `1 CAD = ৳${fx.rate.toFixed(2)} · ${fx.asOf} · ${fx.source}` : 'not available'}</p><button onClick={() => {r.refresh(); s.refresh()}} disabled={r.loading || s.loading || (!r.data && !s.data && !r.error && !s.error)}>{r.loading || s.loading ? 'Reading…' : 'Refresh'}</button></div>
+      <div className="attention-list">{issues.length ? issues.map((issue,i) => <div className="attention-row" key={i}>{issue}</div>) : <p className="muted small">No data warnings.</p>}</div>
+    </details>
+
+    <footer>Finance Manager · cannot move money or place trades · reads RentStream and StockStream without changing them · saves only the bills, spending and draws you record</footer>
   </main>
 }

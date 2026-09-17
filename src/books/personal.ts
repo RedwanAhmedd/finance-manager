@@ -31,6 +31,10 @@ export interface PersonalBooks {
     subscriptionsMonthly: number
     subscriptionsCount: number
     dueLaterThisMonth: { name: string; amount: number; dueDay: number }[]
+    // Monthly bills by their recorded due day, from tomorrow through the next 30 days
+    // (a bill due today has usually already been charged).
+    dueNext30Days: { name: string; amount: number; date: string }[]
+    dueNext30DaysTotal: number
     suggested: SuggestedBill[]
   }
   draws: { date: string; cad: number; bdt: number | null }[]
@@ -93,6 +97,12 @@ export function buildPersonalBooks(data: MoneyData & { suggestions?: SuggestedBi
   const active = data.bills.filter(b => b.active).map(b => ({ name: b.name, category: b.category, amount: b.amount, cadence: b.cadence, dueDay: b.due_day, monthly: monthlyEquivalent(b.amount, b.cadence) }))
     .sort((a, b) => b.monthly - a.monthly)
   const subscriptions = active.filter(b => b.category === 'subscriptions')
+  const end = new Date(`${today}T00:00:00Z`); end.setUTCDate(end.getUTCDate() + 30)
+  const lastDay = end.toISOString().slice(0, 10)
+  const dueNext30Days = active.filter(b => b.cadence === 'monthly' && b.dueDay !== null).flatMap(b => [current, addMonths(current, 1), addMonths(current, 2)].map(m => {
+    const daysInMonth = new Date(Date.UTC(Number(m.slice(0, 4)), Number(m.slice(5, 7)), 0)).getUTCDate()
+    return { name: b.name, amount: b.amount, date: `${m}-${String(Math.min(b.dueDay!, daysInMonth)).padStart(2, '0')}` }
+  })).filter(x => x.date > today && x.date <= lastDay).sort((a, b) => a.date.localeCompare(b.date) || b.amount - a.amount)
 
   const latestByAccount = new Map<string, MoneyTransaction>()
   for (const t of [...tx].sort((a, b) => a.posted_date.localeCompare(b.posted_date))) if (t.balance_after !== null) latestByAccount.set(t.account, t)
@@ -104,6 +114,7 @@ export function buildPersonalBooks(data: MoneyData & { suggestions?: SuggestedBi
       active, monthlyTotal: round2(active.reduce((s, b) => s + b.monthly, 0)),
       subscriptionsMonthly: round2(subscriptions.reduce((s, b) => s + b.monthly, 0)), subscriptionsCount: subscriptions.length,
       dueLaterThisMonth: active.filter(b => b.cadence === 'monthly' && b.dueDay !== null && b.dueDay > day).map(b => ({ name: b.name, amount: b.amount, dueDay: b.dueDay! })).sort((a, b) => a.dueDay - b.dueDay),
+      dueNext30Days, dueNext30DaysTotal: round2(dueNext30Days.reduce((s, b) => s + b.amount, 0)),
       suggested: data.suggestions ?? [],
     },
     draws: tx.filter(t => t.kind === 'draw' && t.posted_date >= `${Number(today.slice(0, 4)) - 1}${today.slice(4)}`).map(t => ({ date: t.posted_date, cad: t.amount, bdt: t.amount_bdt })).sort((a, b) => b.date.localeCompare(a.date)),
