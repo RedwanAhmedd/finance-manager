@@ -1,14 +1,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { number, isStale, type Holding, type StockSnapshot } from './models'
 import { readAll } from './read'
+import { buildStockBooks, type StockDetail } from '../books/stock'
 
 type Amount = number | string
 export interface StockRaw {
   positions: {id: string; symbol: string; role: string; shares: Amount; manual_price: Amount | null; anchor_price: Amount | null; anchor_underlying: Amount | null; updated_at: string}[]
   trades: {id: string; symbol: string; trade_date: string; shares: Amount; price: Amount; created_at: string}[]
   quotes: {symbol: string; trade_date: string; close: Amount}[]
-  symbols: {symbol: string; currency: string; underlying_symbol: string | null; cdr_ratio: Amount | null; cdr_fx_rate: Amount | null; cdr_as_of: string | null}[]
-  settings: {user_id: string; base_currency: string; contributed_ytd: Amount | null; monthly_deposit: Amount | null}[]
+  symbols: {symbol: string; currency: string; underlying_symbol: string | null; cdr_ratio: Amount | null; cdr_fx_rate: Amount | null; cdr_as_of: string | null; display_name?: string}[]
+  settings: {user_id: string; base_currency: string; contributed_ytd: Amount | null; goal_amount?: Amount | null; goal_date?: string | null}[]
   fx: {base: string; quote: string; rate_date: string; rate: Amount}[]
 }
 
@@ -23,14 +24,18 @@ export function normalizeStock(raw: StockRaw, now = new Date()): StockSnapshot {
   const holdings: Holding[] = raw.positions.map(pos => {
     const trades = raw.trades.filter(t => t.symbol === pos.symbol && t.trade_date <= today).sort((a,b) => a.trade_date.localeCompare(b.trade_date) || a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id))
     let shares = number(pos.shares)
+    const tradeIssues: string[] = []
     if (trades.length && pos.role !== 'cash') {
       shares = 0
       for (const trade of trades) {
         const delta = number(trade.shares)
-        if (shares + delta < -0.000001) issues.push(`${pos.symbol}: sale exceeds shares in the imported history.`)
+        if (shares + delta < -0.000001) tradeIssues.push(`${pos.symbol}: sale exceeds shares in the imported history.`)
         shares = delta > 0 ? shares + delta : Math.max(0, shares + delta)
       }
     }
+    // Closed mementos retain their sale history without an actionable holdings alert.
+    // Keep the alert for active roles and for mementos with remaining shares.
+    if (pos.role !== 'memento' || shares !== 0) issues.push(...tradeIssues)
     if (shares < 0) throw new Error(`${pos.symbol}: negative position`)
     const meta = metadata.get(pos.symbol)
     const quote = latest.get(pos.symbol)
@@ -73,7 +78,6 @@ export function normalizeStock(raw: StockRaw, now = new Date()): StockSnapshot {
     cashAsOf: cashRows.map(h => h.asOf).sort()[0] ?? null,
     corePct: portfolioCad !== null && portfolioCad > 0 && core !== null ? core / portfolioCad * 100 : null,
     contributedYtdCad: settings?.base_currency === 'CAD' && settings.contributed_ytd !== null ? number(settings.contributed_ytd) : null,
-    monthlyContributionCad: settings?.base_currency === 'CAD' && settings.monthly_deposit !== null ? number(settings.monthly_deposit) : null,
     issues,
   }
 }
@@ -82,14 +86,17 @@ export class ReadOnlyStockStreamAdapter {
   constructor(private readonly client: SupabaseClient) {}
   async getSnapshot(now = new Date()): Promise<StockSnapshot> {
     const c = this.client
-    const [positions, trades, quotes, symbols, settings, fx] = await Promise.all([
+    const [positions, trades, quotes, symbols, settings, fx, watchlist] = await Promise.all([
       readAll<StockRaw['positions'][number]>(c, 'positions', 'id,symbol,role,shares,manual_price,anchor_price,anchor_underlying,updated_at'),
       readAll<StockRaw['trades'][number]>(c, 'trades', 'id,symbol,trade_date,shares,price,created_at'),
       readAll<StockRaw['quotes'][number]>(c, 'quotes', 'symbol,trade_date,close', ['symbol','trade_date']),
-      readAll<StockRaw['symbols'][number]>(c, 'symbols', 'symbol,currency,underlying_symbol,cdr_ratio,cdr_fx_rate,cdr_as_of', ['symbol']),
-      readAll<StockRaw['settings'][number]>(c, 'settings', 'user_id,base_currency,contributed_ytd,monthly_deposit', ['user_id']),
+      readAll<StockRaw['symbols'][number]>(c, 'symbols', 'symbol,currency,underlying_symbol,cdr_ratio,cdr_fx_rate,cdr_as_of,display_name', ['symbol']),
+      readAll<StockRaw['settings'][number]>(c, 'settings', 'user_id,base_currency,contributed_ytd,goal_amount,goal_date', ['user_id']),
       readAll<StockRaw['fx'][number]>(c, 'fx_rates', 'base,quote,rate_date,rate', ['base','quote','rate_date']),
+      readAll<StockDetail['watchlist'][number]>(c, 'watchlist', 'symbol', ['symbol']),
     ])
-    return normalizeStock({positions,trades,quotes,symbols,settings,fx}, now)
+    const raw = {positions,trades,quotes,symbols,settings,fx}
+    const snapshot = normalizeStock(raw, now)
+    return { ...snapshot, books: buildStockBooks({ ...raw, watchlist }, snapshot, now) }
   }
 }

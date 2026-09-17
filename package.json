@@ -1,7 +1,7 @@
 {
   "name": "finance-manager",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,11 +10,13 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.126.0",
     "@supabase/supabase-js": "2.116.0",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },
   "devDependencies": {
+    "@types/node": "^22.20.3",
     "@types/react": "18.3.23",
     "@types/react-dom": "18.3.7",
     "@types/react-test-renderer": "18.3.1",

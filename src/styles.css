@@ -106,3 +106,40 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .holdings-table th:nth-child(2), .holdings-table td:nth-child(2) { text-align: right; white-space: nowrap; padding-right: 14px; }
 .input-gaps { color: #c7d4e5; padding-left: 20px; line-height: 1.65; }
 .input-gaps li { margin-bottom: 8px; }
+
+/* Assistant */
+.assistant { margin-bottom: 16px; border-color: rgba(130,170,255,.28); }
+.assistant code { background: rgba(255,255,255,.06); border-radius: 5px; padding: 1px 5px; font-size: .92em; }
+.briefing { padding-bottom: 16px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.rich-text { line-height: 1.6; color: #d9e3f1; overflow-wrap: anywhere; }
+.rich-text h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: #9db0ca; margin: 18px 0 6px; }
+.rich-text h3:first-child { margin-top: 0; }
+.rich-text p { margin: 0 0 10px; }
+.rich-text ul { margin: 0 0 10px; padding-left: 20px; }
+.rich-text li { margin-bottom: 5px; }
+.link-button { background: none; border: none; padding: 0; color: var(--accent); font-size: 13px; }
+.chat { display: grid; gap: 10px; }
+.chat-turn { border-radius: 14px; padding: 10px 14px; max-width: 88%; }
+.chat-turn p:last-child, .chat-turn .rich-text > :last-child { margin-bottom: 0; }
+.chat-user { justify-self: end; background: #1a3150; }
+.chat-user p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-assistant { justify-self: start; background: rgba(255,255,255,.03); border: 1px solid var(--border); }
+.suggestions { display: flex; flex-wrap: wrap; gap: 8px; }
+.suggestions button { font-size: 13px; padding: 8px 12px; border-radius: 999px; text-align: left; }
+.chat-form { display: flex; gap: 8px; margin-top: 4px; }
+.chat-form input { flex: 1; min-width: 0; color: white; background: #091526; border: 1px solid var(--border); padding: 10px 12px; border-radius: 10px; }
+@media (max-width: 620px) { .chat-turn { max-width: 100%; } }
+
+/* Everyday money */
+.money { margin-bottom: 16px; }
+.money-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.money-tabs button { font-size: 13px; padding: 7px 12px; border-radius: 999px; background: transparent; }
+.money-tabs button.active { background: #1a3150; border-color: rgba(130,170,255,.4); }
+.money-form { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; align-items: center; }
+.money-form input, .money-form select, .money-review-controls select { color: white; background: #091526; border: 1px solid var(--border); padding: 9px 10px; border-radius: 8px; font: inherit; font-size: 13px; min-width: 0; }
+.money-form input { flex: 1 1 120px; }
+.money-form input[type=file] { flex: 2 1 220px; }
+.money-suggestion { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.money-review { align-items: center; }
+.money-review-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: flex-end; }
+.account-row .link-button { margin-top: 4px; }

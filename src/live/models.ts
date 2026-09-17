@@ -1,3 +1,5 @@
+import type { RentBooks } from '../books/rent'
+import type { StockBooks } from '../books/stock'
 export interface BankBalance {
   id: string
   name: string
@@ -19,7 +21,12 @@ export interface RentSnapshot {
   expectedBdt: number
   collectedBdt: number
   outstandingBdt: number
+  overdueBdt: number
+  overdueBills: number
+  overdueTenants: number
+  overdueSince: string | null
   cashReceipts30dBdt: number
+  books?: RentBooks
   expenses30dBdt: number
   issues: string[]
 }
@@ -40,8 +47,8 @@ export interface StockSnapshot {
   cashAsOf: string | null
   corePct: number | null
   contributedYtdCad: number | null
-  monthlyContributionCad: number | null
   issues: string[]
+  books?: StockBooks
 }
 export function number(value: unknown, label = 'Source value'): number {
   if (value === null || value === undefined || value === '' || typeof value === 'boolean') throw new Error(`${label} is missing`)
