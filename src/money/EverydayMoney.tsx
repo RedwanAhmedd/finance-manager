@@ -12,7 +12,8 @@ const cad = (n: number | null | undefined) => n == null ? '—' : new Intl.Numbe
 const label = (ym: string) => new Date(`${ym}-01T00:00:00Z`).toLocaleString('en-CA', { month: 'short', year: 'numeric', timeZone: 'UTC' })
 const words = (s: string) => s.replace('_', ' / ')
 
-async function post<T>(path: string, body: unknown): Promise<T> {
+async function post<T>(path: string, body: unknown, readOnly = false): Promise<T> {
+  if (readOnly) throw new Error('Demo: changes are not saved.')
   const res = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
   const data = await res.json().catch(() => ({ error: `Request failed (${res.status})` }))
   if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`)
@@ -22,7 +23,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 // Personal money in Canada: what was spent, recorded bills, statement imports,
 // lines to review and draws from the rental business. Records only; the
 // advisor above explains them.
-export default function EverydayMoney({ money, treasury, error, onChanged }: { money: MoneyState; treasury: TreasuryBalance[]; error: string; onChanged: () => void }) {
+export default function EverydayMoney({ money, treasury, error, onChanged, readOnly = false }: { money: MoneyState; treasury: TreasuryBalance[]; error: string; onChanged: () => void; readOnly?: boolean }) {
   const [view, setView] = useState<View>('month')
   const books = useMemo(() => money ? buildPersonalBooks(money, new Date(), treasury) : null, [money, treasury])
   const flagged = money?.transactions.filter(t => t.flagged).length ?? 0
@@ -38,11 +39,11 @@ export default function EverydayMoney({ money, treasury, error, onChanged }: { m
           .map(([id, text]) => <button key={id} role="tab" aria-selected={view === id} className={view === id ? 'active' : ''} onClick={() => setView(id)}>{text}</button>)}
       </div>
       {view === 'month' && <MonthView books={books} />}
-      {view === 'log' && <LogSpendingView books={books} onChanged={onChanged} />}
-      {view === 'bills' && <BillsView bills={money.bills} suggestions={money.suggestions} onChanged={onChanged} />}
-      {view === 'review' && <ReviewView money={money} onChanged={onChanged} />}
-      {view === 'import' && <ImportView onChanged={onChanged} />}
-      {view === 'draws' && <DrawsView books={books} onChanged={onChanged} />}
+      {view === 'log' && <LogSpendingView books={books} onChanged={onChanged} readOnly={readOnly} />}
+      {view === 'bills' && <BillsView bills={money.bills} suggestions={money.suggestions} onChanged={onChanged} readOnly={readOnly} />}
+      {view === 'review' && <ReviewView money={money} onChanged={onChanged} readOnly={readOnly} />}
+      {view === 'import' && <ImportView onChanged={onChanged} readOnly={readOnly} />}
+      {view === 'draws' && <DrawsView books={books} onChanged={onChanged} readOnly={readOnly} />}
     </>}
   </section>
 }
@@ -69,12 +70,12 @@ function MonthView({ books }: { books: ReturnType<typeof buildPersonalBooks> }) 
 
 const emptyBill = { name: '', category: 'subscriptions', amount: '', cadence: 'monthly', due_day: '' }
 
-function BillsView({ bills, suggestions, onChanged }: { bills: Bill[]; suggestions: SuggestedBill[]; onChanged: () => void }) {
+function BillsView({ bills, suggestions, onChanged, readOnly }: { bills: Bill[]; suggestions: SuggestedBill[]; onChanged: () => void; readOnly: boolean }) {
   const [form, setForm] = useState(emptyBill)
   const [status, setStatus] = useState('')
   const save = async (body: Record<string, unknown>, done = '') => {
     setStatus('')
-    try { await post('/api/money/bills', body); setStatus(done); onChanged() } catch (e) { setStatus(e instanceof Error ? e.message : 'Could not save the bill') }
+    try { await post('/api/money/bills', body, readOnly); setStatus(done); onChanged() } catch (e) { setStatus(e instanceof Error ? e.message : 'Could not save the bill') }
   }
   const submit = (e: FormEvent) => { e.preventDefault(); void save(form, 'Bill saved.').then(() => setForm(emptyBill)) }
   const active = bills.filter(b => b.active), inactive = bills.filter(b => !b.active)
@@ -104,14 +105,14 @@ function BillsView({ bills, suggestions, onChanged }: { bills: Bill[]; suggestio
   </>
 }
 
-function ReviewView({ money, onChanged }: { money: NonNullable<MoneyState>; onChanged: () => void }) {
+function ReviewView({ money, onChanged, readOnly }: { money: NonNullable<MoneyState>; onChanged: () => void; readOnly: boolean }) {
   const lines = money.transactions.filter(t => t.flagged).sort((a, b) => b.posted_date.localeCompare(a.posted_date)).slice(0, 50)
   const [choice, setChoice] = useState<Record<string, Partial<{ kind: Kind; category: string; always: boolean }>>>({})
   const [status, setStatus] = useState('')
   if (!lines.length) return <p className="muted">Nothing to review. Every imported line has a category.</p>
   const save = async (id: string, fallback: { kind: Kind; category: string }) => {
     const c = { ...fallback, always: true, ...choice[id] }
-    try { const r = await post<{ applied: number }>('/api/money/categorise', c.kind === 'spend' || c.kind === 'refund' ? { id, ...c } : { id, kind: c.kind, always: c.always }); setStatus(`Saved${r.applied > 1 ? ` for ${r.applied} lines from this merchant` : ''}.`); onChanged() }
+    try { const r = await post<{ applied: number }>('/api/money/categorise', c.kind === 'spend' || c.kind === 'refund' ? { id, ...c } : { id, kind: c.kind, always: c.always }, readOnly); setStatus(`Saved${r.applied > 1 ? ` for ${r.applied} lines from this merchant` : ''}.`); onChanged() }
     catch (e) { setStatus(e instanceof Error ? e.message : 'Could not save') }
   }
   return <>
@@ -136,7 +137,7 @@ function ReviewView({ money, onChanged }: { money: NonNullable<MoneyState>; onCh
 
 type Preview = { total: number; new: number; duplicates: number; transfers: number; investing: number; flagged: number; dateRange: [string, string] | null; lines: { date: string; description: string; amount: number; kind: string; category: string | null; flagged: boolean }[]; inserted?: number }
 
-function ImportView({ onChanged }: { onChanged: () => void }) {
+function ImportView({ onChanged, readOnly }: { onChanged: () => void; readOnly: boolean }) {
   const [account, setAccount] = useState('td_chequing')
   const [csv, setCsv] = useState<string | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
@@ -146,7 +147,7 @@ function ImportView({ onChanged }: { onChanged: () => void }) {
     if (!csv) return
     setBusy(true); setStatus('')
     try {
-      const result = await post<Preview>(path, { account, csv })
+      const result = await post<Preview>(path, { account, csv }, readOnly)
       setPreview(result)
       if (result.inserted !== undefined) { setStatus(`Imported ${result.inserted} new line${result.inserted === 1 ? '' : 's'}; ${result.duplicates} already recorded.`); onChanged() }
     } catch (e) { setPreview(null); setStatus(e instanceof Error ? e.message : 'Import failed') }
@@ -172,13 +173,13 @@ function ImportView({ onChanged }: { onChanged: () => void }) {
   </>
 }
 
-function LogSpendingView({ books, onChanged }: { books: ReturnType<typeof buildPersonalBooks>; onChanged: () => void }) {
+function LogSpendingView({ books, onChanged, readOnly }: { books: ReturnType<typeof buildPersonalBooks>; onChanged: () => void; readOnly: boolean }) {
   const blank = { date: books.asOf, amount: '', category: 'groceries', description: '' }
   const [form, setForm] = useState(blank)
   const [status, setStatus] = useState('')
   const submit = async (e: FormEvent) => {
     e.preventDefault(); setStatus('')
-    try { await post('/api/money/spending', form); setStatus(`Logged ${cad(Number(form.amount))} for ${form.description}.`); setForm({ ...blank, date: form.date, category: form.category }); onChanged() }
+    try { await post('/api/money/spending', form, readOnly); setStatus(`Logged ${cad(Number(form.amount))} for ${form.description}.`); setForm({ ...blank, date: form.date, category: form.category }); onChanged() }
     catch (err) { setStatus(err instanceof Error ? err.message : 'Could not log the spending') }
   }
   return <>
@@ -194,12 +195,12 @@ function LogSpendingView({ books, onChanged }: { books: ReturnType<typeof buildP
   </>
 }
 
-function DrawsView({ books, onChanged }: { books: ReturnType<typeof buildPersonalBooks>; onChanged: () => void }) {
+function DrawsView({ books, onChanged, readOnly }: { books: ReturnType<typeof buildPersonalBooks>; onChanged: () => void; readOnly: boolean }) {
   const [form, setForm] = useState({ date: books.asOf, amount_cad: '', amount_bdt: '', note: '' })
   const [status, setStatus] = useState('')
   const submit = async (e: FormEvent) => {
     e.preventDefault(); setStatus('')
-    try { await post('/api/money/draws', form); setStatus('Draw recorded.'); setForm({ ...form, amount_cad: '', amount_bdt: '', note: '' }); onChanged() }
+    try { await post('/api/money/draws', form, readOnly); setStatus('Draw recorded.'); setForm({ ...form, amount_cad: '', amount_bdt: '', note: '' }); onChanged() }
     catch (err) { setStatus(err instanceof Error ? err.message : 'Could not record the draw') }
   }
   return <>

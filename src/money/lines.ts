@@ -33,6 +33,10 @@ export function merchantKey(description: string): string {
   return normaliseDescription(description).replace(/[#*]\S*/g, ' ').replace(/\d[\d\-./]*/g, ' ').replace(/\b(ON|BC|AB|QC|MB|SK|NS|NB|NL|PE|CA|CAN)\b/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
+// Categories where a monthly repeat means a bill. A restaurant or shop visited
+// once a month is spending, not a commitment.
+const BILL_LIKE = new Set<Category>(['housing', 'utilities', 'phone_internet', 'subscriptions', 'insurance', 'transport'])
+
 export interface SuggestedBill { name: string; category: Category; amount: number; months: string[] }
 
 // A merchant charged in at least two consecutive calendar months, each month
@@ -43,7 +47,7 @@ export function suggestBills(transactions: { posted_date: string; description: s
   const known = new Set(existingBillNames.map(merchantKey))
   const groups = new Map<string, { month: string; amount: number; category: Category }[]>()
   for (const t of transactions) {
-    if (t.kind !== 'spend' || !t.category) continue
+    if (t.kind !== 'spend' || !t.category || !BILL_LIKE.has(t.category)) continue
     const key = merchantKey(t.description)
     if (!key || known.has(key)) continue
     groups.set(key, [...(groups.get(key) ?? []), { month: t.posted_date.slice(0, 7), amount: -t.amount, category: t.category }])
@@ -51,8 +55,8 @@ export function suggestBills(transactions: { posted_date: string; description: s
   const next = (ym: string) => { const d = new Date(`${ym}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + 1); return d.toISOString().slice(0, 7) }
   const suggestions: SuggestedBill[] = []
   for (const [name, charges] of groups) {
-    const byMonth = new Map<string, number>()
-    for (const c of charges) byMonth.set(c.month, (byMonth.get(c.month) ?? 0) + c.amount)
+    const byMonth = new Map<string, number>(), countByMonth = new Map<string, number>()
+    for (const c of charges) { byMonth.set(c.month, (byMonth.get(c.month) ?? 0) + c.amount); countByMonth.set(c.month, (countByMonth.get(c.month) ?? 0) + 1) }
     const months = [...byMonth.keys()].sort()
     let best: string[] = []
     for (let i = 0; i < months.length; i++) {
@@ -60,7 +64,8 @@ export function suggestBills(transactions: { posted_date: string; description: s
       while (months.includes(next(run[run.length - 1]))) run.push(next(run[run.length - 1]))
       if (run.length > best.length) best = run
     }
-    if (best.length < 2) continue
+    // A bill charges once a month; a shop visited several times a month is not one.
+    if (best.length < 2 || best.some(m => countByMonth.get(m) !== 1)) continue
     const amounts = best.map(m => byMonth.get(m)!)
     const latest = amounts[amounts.length - 1]
     if (amounts.every((a, i) => i === 0 || Math.abs(a - amounts[i - 1]) <= amounts[i - 1] * 0.2)) suggestions.push({ name, category: charges[charges.length - 1].category, amount: Math.round(latest * 100) / 100, months: best })

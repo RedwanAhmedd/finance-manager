@@ -5,6 +5,7 @@ import { SafetyBanner } from '../components/SafetyBanner'
 import AssistantPanel from '../assistant/AssistantPanel'
 import type { FxReference } from '../books/overview'
 import EverydayMoney, { type MoneyState } from '../money/EverydayMoney'
+import { sampleFx, sampleMoney, sampleRent, sampleStock } from '../demo/sample'
 import { MetricCard } from '../components/MetricCard'
 import { ReadOnlyRentStreamAdapter } from './rentstream'
 import { ReadOnlyStockStreamAdapter } from './stockstream'
@@ -27,6 +28,10 @@ function serverAdapter<T>(name: 'rentstream' | 'stockstream') {
 const permanentRent = serverAdapter<RentSnapshot>('rentstream')
 const permanentStock = serverAdapter<StockSnapshot>('stockstream')
 const PERMANENT_USER = 'permanent connection'
+// The demo runs the same page on made-up records built by the same normalisers.
+const demoRent = { getSnapshot: async () => sampleRent() }
+const demoStock = { getSnapshot: async () => sampleStock() }
+const DEMO_USER = 'sample data'
 // Taka in lakh grouping (৳12,34,567), poisha only when present.
 const bdt = (n: number | null | undefined) => {
   if (n == null) return 'Unknown'
@@ -106,7 +111,7 @@ function StockView({stock}: {stock: StockSnapshot}) {
   </article>
 }
 
-export default function LiveDashboard({ onDemo }: { onDemo: () => void }) {
+export default function LiveDashboard({ demo, onToggleDemo }: { demo: boolean; onToggleDemo: () => void }) {
   const [rentUser, setRentUser] = useState<string | null>(null)
   const [stockUser, setStockUser] = useState<string | null>(null)
   const [now, setNow] = useState(new Date())
@@ -118,31 +123,33 @@ export default function LiveDashboard({ onDemo }: { onDemo: () => void }) {
   const [moneyError, setMoneyError] = useState('')
   // Personal money records, kept by the local server; reloaded after every change.
   const loadMoney = useCallback(() => {
+    if (demo) { setMoney(sampleMoney()); setMoneyError(''); return }
     fetch('/api/money').then(async res => {
       const body = await res.json().catch(() => ({ error: `Personal money read failed (${res.status})` }))
       if (!res.ok) throw new Error(body.error)
       setMoney(body); setMoneyError('')
     }).catch(error => setMoneyError(error instanceof Error ? error.message : 'Personal money read failed'))
-  }, [])
+  }, [demo])
   useEffect(() => { loadMoney(); const timer = setInterval(loadMoney, 3_600_000); return () => clearInterval(timer) }, [loadMoney])
   // Daily CAD/BDT reference rate from the local server; re-checked hourly.
   useEffect(() => {
+    if (demo) { setFx(sampleFx()); return }
     const load = () => fetch('/api/fx').then(r => r.ok ? r.json() : null).then(rate => setFx(current => rate && (current?.rate !== rate.rate || current?.asOf !== rate.asOf) ? rate : current)).catch(() => {})
     load()
     const timer = setInterval(load, 3_600_000)
     return () => clearInterval(timer)
-  }, [])
-  useEffect(() => { fetch('/api/sources').then(r => r.ok ? r.json() : null).then(setPermanent).catch(() => setPermanent({ rentstream: false, stockstream: false })) }, [])
-  const r = useSnapshot(permanent?.rentstream ? PERMANENT_USER : permanent ? rentUser : null, permanent?.rentstream ? permanentRent : rentAdapter)
-  const s = useSnapshot(permanent?.stockstream ? PERMANENT_USER : permanent ? stockUser : null, permanent?.stockstream ? permanentStock : stockAdapter)
+  }, [demo])
+  useEffect(() => { if (demo) return; fetch('/api/sources').then(r => r.ok ? r.json() : null).then(setPermanent).catch(() => setPermanent({ rentstream: false, stockstream: false })) }, [])
+  const r = useSnapshot(demo ? DEMO_USER : permanent?.rentstream ? PERMANENT_USER : permanent ? rentUser : null, demo ? demoRent : permanent?.rentstream ? permanentRent : rentAdapter)
+  const s = useSnapshot(demo ? DEMO_USER : permanent?.stockstream ? PERMANENT_USER : permanent ? stockUser : null, demo ? demoStock : permanent?.stockstream ? permanentStock : stockAdapter)
   const { refresh: refreshRent } = r, { refresh: refreshStock } = s
   useEffect(() => { const timer = setInterval(() => setNow(new Date()),60_000); return () => clearInterval(timer) }, [])
   // Permanently connected figures stay current on their own: re-read hourly.
   useEffect(() => {
-    if (!permanent?.rentstream && !permanent?.stockstream) return
+    if (demo || (!permanent?.rentstream && !permanent?.stockstream)) return
     const timer = setInterval(() => { if (permanent.rentstream) refreshRent(); if (permanent.stockstream) refreshStock() }, 3_600_000)
     return () => clearInterval(timer)
-  }, [permanent, refreshRent, refreshStock])
+  }, [demo, permanent, refreshRent, refreshStock])
   const rent = r.data, stock = s.data
   const reading = r.loading || s.loading
   const cashBdt = rent?.bankCashBdt != null && rent.operatingCashBdt !== null ? rent.bankCashBdt + rent.operatingCashBdt + (rent.treasuryCashBdt ?? 0) : null
@@ -150,10 +157,11 @@ export default function LiveDashboard({ onDemo }: { onDemo: () => void }) {
   const issues = [...(rent?.issues ?? []), ...(stock?.issues ?? [])]
   const snapshotStale = [rent?.fetchedAt, stock?.fetchedAt].some(t => t && isStale(t, now, 1/24))
   return <main className="shell">
-    <header className="topbar"><div><div className="brand">FINANCE MANAGER</div><div className="muted">Your everyday money, rental business and investments · v0.4</div></div><button onClick={onDemo}>View demo</button></header>
+    <header className="topbar"><div><div className="brand">FINANCE MANAGER</div><div className="muted">Your everyday money, rental business and investments · v0.4</div></div><button onClick={onToggleDemo}>{demo ? 'Back to my finances' : 'View demo'}</button></header>
+    {demo && <div className="safety-banner demo-banner" role="status"><strong>Demo · sample data</strong><span>Everything on this page is made up. Nothing here is your finances, and nothing you do in the demo is saved.</span></div>}
     <SafetyBanner />
-    <section className="hero panel"><div><div className="eyebrow">{reading ? 'Refreshing source records' : rent && stock ? 'Live source reads' : 'Connect your sources'}</div><h1>Your financial picture, together.</h1><p className="muted">Balances come from RentStream and StockStream. Their record dates remain visible; fetching a record does not make an old balance current.</p></div><span className="status status-watch">{reading ? 'Reading' : rent && stock ? 'Review data gaps' : 'Setup'}</span></section>
-    {permanent && <details className="connections" open={!(permanent.rentstream || rentUser) || !(permanent.stockstream || stockUser)}><summary>Source connections</summary><section className="two-col">
+    <section className="hero panel"><div><div className="eyebrow">{demo ? 'Sample data' : reading ? 'Refreshing source records' : rent && stock ? 'Live source reads' : 'Connect your sources'}</div><h1>Your financial picture, together.</h1><p className="muted">Balances come from RentStream and StockStream. Their record dates remain visible; fetching a record does not make an old balance current.</p></div><span className="status status-watch">{reading ? 'Reading' : rent && stock ? 'Review data gaps' : 'Setup'}</span></section>
+    {!demo && permanent && <details className="connections" open={!(permanent.rentstream || rentUser) || !(permanent.stockstream || stockUser)}><summary>Source connections</summary><section className="two-col">
       {permanent.rentstream ? <PermanentConnection source="RentStream" /> : <Connection source="RentStream" client={clients.RentStream} onSession={rentSession} />}
       {permanent.stockstream ? <PermanentConnection source="StockStream" /> : <Connection source="StockStream" client={clients.StockStream} onSession={stockSession} />}
     </section></details>}
@@ -162,7 +170,7 @@ export default function LiveDashboard({ onDemo }: { onDemo: () => void }) {
     {s.error && <p className="panel error" role="alert">StockStream read failed: {s.error}. Its figures have been cleared.</p>}
     {snapshotStale && <p className="safety-banner" role="status">This snapshot is more than one hour old. Refresh before using its figures.</p>}
     <AssistantPanel rent={rent} stock={stock} fx={fx} money={money} reading={reading} />
-    <EverydayMoney money={money} treasury={rent?.treasury ?? []} error={moneyError} onChanged={loadMoney} />
+    <EverydayMoney money={money} treasury={rent?.treasury ?? []} error={moneyError} onChanged={loadMoney} readOnly={demo} />
     <section className="metrics-grid">
       <MetricCard label="Recorded cash · Bangladesh" value={bdt(cashBdt)} note="All BDT bank balances + operating cash; family-restricted and unclassified cash are separated below" />
       <MetricCard label="Strategic deployable · BDT" value={bdt(rent?.strategicDeployableBdt)} note="After card debt and 3 months of recorded expenses; excludes family-restricted and unclassified accounts" />

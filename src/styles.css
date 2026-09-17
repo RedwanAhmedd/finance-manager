@@ -143,3 +143,6 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .money-review { align-items: center; }
 .money-review-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: flex-end; }
 .account-row .link-button { margin-top: 4px; }
+
+.demo-banner { border-color: rgba(130,170,255,.35); background: rgba(130,170,255,.08); color: #cfe0ff; }
+.demo-banner span { color: #9fb6dc; }

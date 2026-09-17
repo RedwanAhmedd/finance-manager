@@ -11,7 +11,7 @@ const table = (head: string[], rows: (string | number)[][]) => [head.join(' | ')
 // US shares, reads a two-week price move as a trend, or picks stocks.
 export const STOCK_GUIDE = `## How the Canadian investments work (StockStream)
 - The owner invests in Canada through a brokerage account; count it as the owner's money. All amounts are Canadian dollars (C$).
-- The portfolio has a core and satellites. The core is XEQT, a single ETF holding thousands of companies worldwide; it is the diversified base. Satellites are individual companies the owner chose, held as CDRs (Canadian Depositary Receipts): CAD-hedged receipts traded in Canada that track a US share without currency risk. A memento is a token position kept for sentimental reasons.
+- The portfolio has a core and satellites. The core is a single broad ETF holding thousands of companies worldwide (the holding with role "core"); it is the diversified base. Satellites are individual companies the owner chose, held as CDRs (Canadian Depositary Receipts): CAD-hedged receipts traded in Canada that track a US share without currency risk. A memento is a token position kept for sentimental reasons.
 - Cost and gains use the Canadian adjusted-cost-base method (average cost). Trade history starts on the date shown below; positions bought earlier have unknown cost and are listed as excluded.
 - StockStream's project notes describe this as a single TFSA account, where gains are not taxed. The records themselves do not store the account type, so mention that caveat if tax matters to the answer.
 - The price history covers only a few weeks. Short price moves are not trends and say nothing about future returns.

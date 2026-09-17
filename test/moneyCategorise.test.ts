@@ -42,6 +42,7 @@ describe('Statement lines', () => {
       t('2026-06-03', 'NETFLIX.COM 866-579-7172 ON', -16.99), t('2026-07-03', 'NETFLIX.COM 866-579-7172 ON', -16.99), t('2026-08-03', 'NETFLIX.COM 866-579-7172 ON', -18.99),
       t('2026-06-10', 'SPOTIFY P1234', -11.99), t('2026-08-10', 'SPOTIFY P5678', -11.99),
       t('2026-07-01', 'ROGERS 55', -80, 'phone_internet' as never), t('2026-08-01', 'ROGERS 55', -140, 'phone_internet' as never),
+      t('2026-07-04', 'FRESHCO 12', -60, 'groceries' as never), t('2026-07-18', 'FRESHCO 12', -55, 'groceries' as never), t('2026-08-04', 'FRESHCO 12', -58, 'groceries' as never), t('2026-08-19', 'FRESHCO 12', -61, 'groceries' as never),
     ], [])
     expect(suggestions).toEqual([{ name: 'NETFLIX.COM', category: 'subscriptions', amount: 18.99, months: ['2026-06', '2026-07', '2026-08'] }])
     expect(suggestBills([t('2026-07-03', 'NETFLIX.COM', -16.99), t('2026-08-03', 'NETFLIX.COM', -16.99)], ['Netflix.com'])).toEqual([])
