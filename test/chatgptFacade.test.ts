@@ -71,12 +71,14 @@ describe('buildChatGptFinanceContext', () => {
     expect(context.attention[0]).toContain('RentStream read is stale')
   })
 
-  it('surfaces missing or failed sources instead of treating them as zero', () => {
-    const context = buildChatGptFinanceContext({ stock, rentError: 'session expired' }, now)
+  it('surfaces structured failures instead of treating them as zero', () => {
+    const failure = { code: 'AUTH_REQUIRED' as const, message: 'RentStream authentication is required.' }
+    const context = buildChatGptFinanceContext({ stock, rentFailure: failure }, now)
 
     expect(context.rent).toBeNull()
     expect(context.sourceHealth.rentStream.status).toBe('unavailable')
-    expect(context.attention).toContain('RentStream unavailable: session expired')
+    expect(context.sourceHealth.rentStream.error).toEqual(failure)
+    expect(context.attention).toContain('RentStream unavailable: RentStream authentication is required.')
     expect(context.stock?.portfolioCad).toBe(1000)
   })
 })
