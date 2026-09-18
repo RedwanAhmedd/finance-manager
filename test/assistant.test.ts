@@ -38,7 +38,8 @@ describe('Assistant context', () => {
     expect(bd.totals.liquidCashAfterCardDebt.value).toBe('unknown')
     expect(assistantSummary({ ...rent, bankCashBdt: 10, operatingCashBdt: -50, cardDebtBdt: 0, refundableDepositsBdt: 0 }, null).bangladesh).toMatchObject({ totals: { recordedLiquidCash: { value: '−৳40.00' } } })
     expect(c.canada).toEqual({ connected: false })
-    expect(assistantContext(rent, null)).toContain('# Summary of both sources')
+    expect(assistantContext(rent, null)).toContain('# How to read the owner')
+    expect(assistantContext(rent, null, null, null, new Date('2026-09-15T12:00:00Z'))).toBe(assistantContext(rent, null, null, null, new Date('2026-09-15T12:05:00Z')))
     expect(assistantContext(rent, null)).not.toContain('RentStream books')
   })
 })
@@ -126,6 +127,7 @@ describe('Ollama provider', () => {
     expect(sent!.messages[0].role).toBe('system')
     expect(sent!.messages[0].content).toContain('cash: ৳5')
     expect(sent!.options.num_ctx).toBe(8192)
+    expect((sent as unknown as { think: boolean }).think).toBe(true)
   })
 })
 
@@ -151,6 +153,20 @@ describe('Assistant endpoint', () => {
       (input, init) => fetch(`${base}${input}`, init))
     expect(text).toBe('You asked 1')
     expect(end.stop).toBe('end_turn')
+  })
+  it('writes a briefing once per set of figures and reuses it', async () => {
+    let calls = 0
+    const base = await serve(fake({ async *stream(request: AssistantRequest) { calls++; yield `Briefing for ${request.context}`; return 'end_turn' } }))
+    const brief = async (context: string) => { let text = ''; await streamAssistant({ mode: 'briefing', context }, t => { text += t }, new AbortController().signal, (input, init) => fetch(`${base}${input}`, init)); return text }
+    const [a, b] = await Promise.all([brief('figures A'), brief('figures A')])
+    expect([a, b, await brief('figures A')]).toEqual(['Briefing for figures A', 'Briefing for figures A', 'Briefing for figures A'])
+    expect(calls).toBe(1)
+    expect(await brief('figures B')).toBe('Briefing for figures B')
+    expect(calls).toBe(2)
+    // Chat is never reused.
+    await streamAssistant({ mode: 'chat', context: 'figures A', messages: [{ role: 'user', content: 'hi' }] }, () => {}, new AbortController().signal, (input, init) => fetch(`${base}${input}`, init))
+    await streamAssistant({ mode: 'chat', context: 'figures A', messages: [{ role: 'user', content: 'hi' }] }, () => {}, new AbortController().signal, (input, init) => fetch(`${base}${input}`, init))
+    expect(calls).toBe(4)
   })
   it('reports readiness and setup steps', async () => {
     const base = await serve(fake({ check: async () => 'Run: ollama serve' }))

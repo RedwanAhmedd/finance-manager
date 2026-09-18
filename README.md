@@ -23,6 +23,10 @@ Open http://127.0.0.1:5177 and sign in to each source using its existing email/p
 
 `VITE_*` values are public browser configuration. Use **publishable** keys only. Never add service-role keys, secret keys, database passwords, or management tokens. `.env.local` is ignored by Git.
 
+## Run as a background service (macOS)
+
+`npm run serve` (`scripts/serve.sh`) builds the page and serves it with its local API on http://127.0.0.1:5177 without watching files. A LaunchAgent (`~/Library/LaunchAgents/com.redwanahmed.finance-manager.plist`) runs it at login and restarts it if it stops; logs go to `~/Library/Logs/finance-manager.log`. After changing the code, restart it with `launchctl kickstart -k gui/$(id -u)/com.redwanahmed.finance-manager`. Keep the project outside `~/Documents`: macOS does not let background items read that folder.
+
 ## Live behavior
 
 - **Banks:** the latest statement on or before the Bangladesh business date is the anchor. Only later dated movements through that date affect its balance. Unknown balances stay unknown. Credit-card debt and card credit are excluded from liquid cash.

@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import Anthropic from '@anthropic-ai/sdk'
 import { parseRequest, RequestError, type AssistantRequest } from './prompt.ts'
 import { ProviderError, type Provider } from './providers.ts'
@@ -39,6 +40,16 @@ function sameOrigin(req: IncomingMessage): boolean {
 // saveContextTo (development only) writes the latest document the model was given,
 // so its understanding can be tested against the source database.
 export function createAssistantHandler(provider: Provider, { saveContextTo }: { saveContextTo?: string } = {}) {
+  // A briefing depends only on the figures. The local model handles one request
+  // at a time, so every page load or open tab writing its own briefing queued the
+  // owner's questions behind minutes of work. A finished briefing is kept per
+  // document, and a second request for the same document waits for the first.
+  const briefings = new Map<string, string>()
+  const writing = new Map<string, Promise<string | null>>()
+  const remember = (key: string, text: string) => {
+    briefings.set(key, text)
+    while (briefings.size > 20) briefings.delete(briefings.keys().next().value!)
+  }
   return async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
     const path = req.url?.split('?')[0]
     if (path !== '/api/assistant' && path !== '/api/assistant/status') return next()
@@ -65,15 +76,33 @@ export function createAssistantHandler(provider: Provider, { saveContextTo }: { 
     const send = (event: object) => res.write(`${JSON.stringify(event)}\n`)
     const controller = new AbortController()
     res.on('close', () => { if (!res.writableEnded) controller.abort() })
+    const key = request.mode === 'briefing' ? createHash('sha256').update(`${provider.name}|${provider.model}|${request.context}`).digest('hex') : null
+    if (key) {
+      const ready = briefings.get(key) ?? await writing.get(key)
+      if (ready) { send({ text: ready }); send({ done: true, stop: 'end_turn' }); return void res.end() }
+    }
+    let finish: (text: string | null) => void = () => {}
+    if (key) writing.set(key, new Promise(resolve => { finish = resolve }))
+    let written = '', completed = false
     try {
       const stream = provider.stream(request, controller.signal)
       for (;;) {
         const step = await stream.next()
-        if (step.done) { send({ done: true, stop: step.value }); break }
+        if (step.done) {
+          completed = step.value === 'end_turn'
+          send({ done: true, stop: step.value }); break
+        }
+        written += step.value
         send({ text: step.value })
       }
     } catch (error) {
       if (!controller.signal.aborted) send({ error: errorText(error) })
+    } finally {
+      if (key) {
+        if (completed && written.trim()) remember(key, written)
+        writing.delete(key)
+        finish(completed && written.trim() ? written : null)
+      }
     }
     res.end()
   }

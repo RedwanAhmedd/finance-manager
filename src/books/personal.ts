@@ -35,6 +35,8 @@ export interface PersonalBooks {
     // (a bill due today has usually already been charged).
     dueNext30Days: { name: string; amount: number; date: string }[]
     dueNext30DaysTotal: number
+    // Recorded Canadian cash minus those bills: can the bills be paid from what is there?
+    canadianCashAfterDueBills: number | null
     suggested: SuggestedBill[]
   }
   draws: { date: string; cad: number; bdt: number | null }[]
@@ -115,6 +117,7 @@ export function buildPersonalBooks(data: MoneyData & { suggestions?: SuggestedBi
       subscriptionsMonthly: round2(subscriptions.reduce((s, b) => s + b.monthly, 0)), subscriptionsCount: subscriptions.length,
       dueLaterThisMonth: active.filter(b => b.cadence === 'monthly' && b.dueDay !== null && b.dueDay > day).map(b => ({ name: b.name, amount: b.amount, dueDay: b.dueDay! })).sort((a, b) => a.dueDay - b.dueDay),
       dueNext30Days, dueNext30DaysTotal: round2(dueNext30Days.reduce((s, b) => s + b.amount, 0)),
+      canadianCashAfterDueBills: treasury.some(a => a.currency === 'CAD') ? round2(treasury.filter(a => a.currency === 'CAD').reduce((s, a) => s + a.balance, 0) - dueNext30Days.reduce((s, b) => s + b.amount, 0)) : null,
       suggested: data.suggestions ?? [],
     },
     draws: tx.filter(t => t.kind === 'draw' && t.posted_date >= `${Number(today.slice(0, 4)) - 1}${today.slice(4)}`).map(t => ({ date: t.posted_date, cad: t.amount, bdt: t.amount_bdt })).sort((a, b) => b.date.localeCompare(a.date)),

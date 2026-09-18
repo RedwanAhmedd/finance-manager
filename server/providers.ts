@@ -60,7 +60,8 @@ export function anthropicProvider(apiKey: string | undefined): Provider {
 // oldest tokens (the instructions and figures) when a prompt overflows. Keep the
 // system prompt and snapshot whole; drop the oldest question/answer pairs instead.
 export function fitConversation(system: string, turns: Turn[], contextTokens: number): Turn[] {
-  const tokens = (s: string) => Math.ceil(s.length / 3.5)
+  // Tables and ৳ amounts tokenise densely: the real books measured ~2.6 characters a token.
+  const tokens = (s: string) => Math.ceil(s.length / 2.5)
   const budget = contextTokens - 1_500 // room for the reply
   if (tokens(system) + tokens(BRIEFING_REQUEST) > budget) throw new ProviderError('The figures are too large for this local model\'s context window. Raise OLLAMA_NUM_CTX or use a model with a longer context.')
   const kept = [...turns]
@@ -90,7 +91,10 @@ export function ollamaProvider({ host = 'http://127.0.0.1:11434', model = 'qwen3
       const messages = [{ role: 'system', content: system }, ...fitConversation(system, conversation(request), numCtx)]
       const res = await transport(`${base}/api/chat`, {
         method: 'POST', signal, headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ model, messages, stream: true, options: { num_ctx: numCtx, temperature: 0.2 } }),
+        // Silent thinking cost minutes per question on this Mac (hundreds of hidden
+        // tokens at ~9 a second). Questions answer from precomputed figures without it;
+        // the briefing, written once per set of figures and reused, keeps it.
+        body: JSON.stringify({ model, messages, stream: true, think: request.mode === 'briefing', options: { num_ctx: numCtx, temperature: 0.2 } }),
       }).catch(() => { throw new ProviderError(`Ollama is not reachable at ${base}.`) })
       if (!res.ok || !res.body) throw new ProviderError(`Ollama returned ${res.status}${res.status === 404 ? `; is "${model}" installed?` : ''}`)
       const decoder = new TextDecoder()

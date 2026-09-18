@@ -1,9 +1,9 @@
 import type { RentSnapshot, StockSnapshot } from '../live/models'
-import { renderRentBooks } from '../books/renderRent'
-import { renderStockBooks } from '../books/renderStock'
+import { RENT_GUIDE, renderRentBooks } from '../books/renderRent'
+import { STOCK_GUIDE, renderStockBooks } from '../books/renderStock'
 import { buildOverview, renderOverview, type FxReference } from '../books/overview'
 import { buildPersonalBooks } from '../books/personal'
-import { renderPersonalBooks } from '../books/renderPersonal'
+import { PERSONAL_GUIDE, renderPersonalBooks } from '../books/renderPersonal'
 import type { MoneyData } from '../money/types'
 import type { SuggestedBill } from '../money/lines'
 
@@ -79,11 +79,15 @@ export function assistantSummary(rent: RentSnapshot | null, stock: StockSnapshot
 // books for each source that was read.
 export function assistantContext(rent: RentSnapshot | null, stock: StockSnapshot | null, fx: FxReference | null = null, money: (MoneyData & { suggestions?: SuggestedBill[] }) | null = null, now = new Date()): string {
   const personal = money ? buildPersonalBooks(money, now, rent?.treasury ?? []) : null
+  // The local model re-reads this whole document for every question unless its
+  // start is byte-identical to the previous request. So the fixed guides come
+  // first, no timestamps are included, and the figures follow.
+  const withoutGuide = (text: string, guide: string) => text.startsWith(guide) ? text.slice(guide.length).trimStart() : text
   return [
+    `# How to read the owner's records\n${[RENT_GUIDE, PERSONAL_GUIDE, STOCK_GUIDE].join('\n\n')}`,
     fx ? `# ${renderOverview(buildOverview(rent, stock, fx, personal)).slice(3)}` : '# Overview across both countries\nNo CAD/BDT reference rate is available, so the two sides cannot be compared in one currency.',
-    `# Summary of both sources\n${JSON.stringify(assistantSummary(rent, stock, now), null, 1)}`,
-    rent?.books ? `# Bangladesh: RentStream books\n${renderRentBooks(rent.books)}` : '',
-    personal ? `# Canada: personal money\n${renderPersonalBooks(personal)}` : '',
-    stock?.books ? `# Canada: StockStream books\n${renderStockBooks(stock.books)}` : '',
+    rent?.books ? `# Bangladesh: RentStream books\n${withoutGuide(renderRentBooks(rent.books), RENT_GUIDE)}` : '',
+    personal ? `# Canada: personal money\n${withoutGuide(renderPersonalBooks(personal), PERSONAL_GUIDE)}` : '',
+    stock?.books ? `# Canada: StockStream books\n${withoutGuide(renderStockBooks(stock.books), STOCK_GUIDE)}` : '',
   ].filter(Boolean).join('\n\n')
 }
