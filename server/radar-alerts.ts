@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { ownedPositionAlerts, RANK, type AlertCandidate, type Severity } from '../src/radar/alerts.ts'
 import type { StockSnapshot } from '../src/live/models.ts'
 import type { RadarSnapshot } from '../src/radar/types.ts'
+import { tmxWatchlistMoves } from './tmx.ts'
 
 // Radar's alert delivery: each alert episode is persisted and read back before
 // any delivery attempt, and delivery status is recorded separately from the
@@ -30,7 +31,7 @@ export function buyOpportunities(snapshot: RadarSnapshot): Opportunity[] {
 }
 
 const MAX_ATTEMPTS = 5
-const PRIORITY: Record<Severity, PushMessage['priority']> = { 'MONITORING DEGRADED': 3, WARNING: 3, 'HIGH ALERT': 4, 'CRITICAL REVIEW': 5, 'BUY OPPORTUNITY': 4 }
+const PRIORITY: Record<Severity, PushMessage['priority']> = { 'MONITORING DEGRADED': 3, WARNING: 3, 'HIGH ALERT': 4, 'CRITICAL REVIEW': 5, 'BUY OPPORTUNITY': 4, 'RESEARCH CANDIDATE': 2 }
 const hash = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex')
 
 // ntfy delivers to the ntfy iPhone app. Anyone who knows the topic can read it,
@@ -94,7 +95,7 @@ export function createRadarAlerts({ directory, getStock, send, now = () => new D
     for (const e of episodes.filter(e => !e.resolvedAt && (e.kind !== 'degraded' || e.failureCount === undefined || e.failureCount >= 2) &&
       (e.delivery.status === 'pending' || (e.delivery.status === 'failed' && e.delivery.attempts < MAX_ATTEMPTS)))) {
       let error: string | null = null
-      try { await send({ title: e.title, body: e.body, priority: PRIORITY[e.severity], tags: [e.kind === 'opportunity' ? 'moneybag' : e.kind === 'degraded' ? 'warning' : e.movePct! < 0 ? 'chart_with_downwards_trend' : 'chart_with_upwards_trend'] }) }
+      try { await send({ title: e.title, body: e.body, priority: PRIORITY[e.severity], tags: [e.kind === 'opportunity' ? 'moneybag' : e.kind === 'discovery' ? 'mag' : e.kind === 'degraded' ? 'warning' : e.movePct! < 0 ? 'chart_with_downwards_trend' : 'chart_with_upwards_trend'] }) }
       catch (err) { error = err instanceof Error ? err.message : 'Delivery failed' }
       const at = now().toISOString()
       update(list => list.map(x => x.id === e.id && x.updatedAt === e.updatedAt
@@ -160,6 +161,25 @@ export function createRadarAlerts({ directory, getStock, send, now = () => new D
     }
   }
 
+  async function discoverWatchlist() {
+    if (!send) return { created: 0 }
+    const stock = await getStock().catch(() => null)
+    const symbols = stock?.books?.watchlist ?? []
+    const moves = await tmxWatchlistMoves(symbols, now())
+    let created = 0
+    for (const m of moves.filter(m => Math.abs(m.movePct) >= 3)) {
+      const id = `discovery|${m.symbol}|${m.date}`
+      if (read().episodes.some(e => e.id === id)) continue
+      const stamp = now().toISOString(), pct = `${m.movePct >= 0 ? '+' : ''}${m.movePct.toFixed(1)}%`
+      const alert: AlertCandidate = { id, kind: 'discovery', symbol: m.symbol, date: m.date, severity: 'RESEARCH CANDIDATE', movePct: Math.round(m.movePct * 10) / 10,
+        title: `🔎 ${m.symbol.replace(/\.(NE|TO)$/, '')} · research candidate`,
+        body: `${m.symbol} moved ${pct} on its exact Canadian listing. Radar flagged it for research, not as a BUY. ELITE/XEQT/cash gates still have to clear. No trade was placed.` }
+      const episodes = update(list => [...list, { ...alert, createdAt: stamp, updatedAt: stamp, delivery: { status: 'pending', attempts: 0, lastAttemptAt: null, error: null } }].slice(-2000))
+      await deliver(episodes); created++
+    }
+    return { created }
+  }
+
   async function notifyOpportunities(getRadar: () => Promise<RadarSnapshot>) {
     if (!send) return { created: 0 }
     const snapshot = await getRadar()
@@ -184,14 +204,14 @@ export function createRadarAlerts({ directory, getStock, send, now = () => new D
     await send({ title: 'Radar test · connection only', body: 'Finance Manager reached this phone. This is a manual delivery test, not a market signal. Live alerts will name the instrument, the observed change and the reason to review.', priority: 2, tags: ['white_check_mark'] })
   }
 
-  return { check, status, sendTest, notifyOpportunities }
+  return { check, status, sendTest, notifyOpportunities, discoverWatchlist }
 }
 
 // Runs a scan shortly after start and then hourly. Daily closes change once a
 // day, and a replayed scan never resends an episode.
 export function scheduleRadarAlerts(alerts: ReturnType<typeof createRadarAlerts>, log: (line: string) => void, everyMs = 3_600_000, getRadar?: () => Promise<RadarSnapshot>) {
   const run = () => alerts.check()
-    .then(async r => { if (r.created || r.escalated || !r.sourceRead) log(`Radar alerts: ${r.created} new, ${r.escalated} escalated${r.sourceRead ? '' : ', portfolio unreadable'}`); if (getRadar) { const o = await alerts.notifyOpportunities(getRadar); if (o.created) log(`Radar opportunities: ${o.created} new BUY alert(s)`) } })
+    .then(async r => { if (r.created || r.escalated || !r.sourceRead) log(`Radar alerts: ${r.created} new, ${r.escalated} escalated${r.sourceRead ? '' : ', portfolio unreadable'}`); if (getRadar) { const d = await alerts.discoverWatchlist(); if (d.created) log(`Radar discovery: ${d.created} research candidate(s)`); const o = await alerts.notifyOpportunities(getRadar); if (o.created) log(`Radar opportunities: ${o.created} new BUY alert(s)`) } })
     .catch(e => log(`Radar alerts failed: ${e instanceof Error ? e.message : e}`))
   const first = setTimeout(run, 30_000)
   const timer = setInterval(run, everyMs)
