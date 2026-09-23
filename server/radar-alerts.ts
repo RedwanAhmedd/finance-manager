@@ -3,6 +3,7 @@ import { closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readF
 import { resolve } from 'node:path'
 import { ownedPositionAlerts, RANK, type AlertCandidate, type Severity } from '../src/radar/alerts.ts'
 import type { StockSnapshot } from '../src/live/models.ts'
+import type { RadarSnapshot } from '../src/radar/types.ts'
 
 // Radar's alert delivery: each alert episode is persisted and read back before
 // any delivery attempt, and delivery status is recorded separately from the
@@ -19,8 +20,17 @@ interface Store { schemaVersion: 1; episodes: Episode[]; lastReliableAt?: string
 export interface PushMessage { title: string; body: string; priority: 1 | 2 | 3 | 4 | 5; tags: string[] }
 export type Send = (message: PushMessage) => Promise<void>
 
+type Opportunity = { symbol: string; action: 'BUY' | 'BUY MORE'; amountCad: number | null; reason: string; savedAt: string }
+function opportunityId(o: Opportunity) { return `opportunity|${o.symbol}|${o.action}|${o.savedAt}` }
+export function buyOpportunities(snapshot: RadarSnapshot): Opportunity[] {
+  if (snapshot.status !== 'ready' || !snapshot.coverage.portfolio) return []
+  return snapshot.candidates.flatMap(c => c.decision.action === 'BUY' || c.decision.action === 'BUY MORE'
+    ? [{ symbol: c.decision.symbol, action: c.decision.action, amountCad: c.decision.amountCad, reason: c.decision.reason, savedAt: c.savedAt }]
+    : [])
+}
+
 const MAX_ATTEMPTS = 5
-const PRIORITY: Record<Severity, PushMessage['priority']> = { 'MONITORING DEGRADED': 3, WARNING: 3, 'HIGH ALERT': 4, 'CRITICAL REVIEW': 5 }
+const PRIORITY: Record<Severity, PushMessage['priority']> = { 'MONITORING DEGRADED': 3, WARNING: 3, 'HIGH ALERT': 4, 'CRITICAL REVIEW': 5, 'BUY OPPORTUNITY': 4 }
 const hash = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex')
 
 // ntfy delivers to the ntfy iPhone app. Anyone who knows the topic can read it,
@@ -84,7 +94,7 @@ export function createRadarAlerts({ directory, getStock, send, now = () => new D
     for (const e of episodes.filter(e => !e.resolvedAt && (e.kind !== 'degraded' || e.failureCount === undefined || e.failureCount >= 2) &&
       (e.delivery.status === 'pending' || (e.delivery.status === 'failed' && e.delivery.attempts < MAX_ATTEMPTS)))) {
       let error: string | null = null
-      try { await send({ title: e.title, body: e.body, priority: PRIORITY[e.severity], tags: [e.kind === 'degraded' ? 'warning' : e.movePct! < 0 ? 'chart_with_downwards_trend' : 'chart_with_upwards_trend'] }) }
+      try { await send({ title: e.title, body: e.body, priority: PRIORITY[e.severity], tags: [e.kind === 'opportunity' ? 'moneybag' : e.kind === 'degraded' ? 'warning' : e.movePct! < 0 ? 'chart_with_downwards_trend' : 'chart_with_upwards_trend'] }) }
       catch (err) { error = err instanceof Error ? err.message : 'Delivery failed' }
       const at = now().toISOString()
       update(list => list.map(x => x.id === e.id && x.updatedAt === e.updatedAt
@@ -150,19 +160,38 @@ export function createRadarAlerts({ directory, getStock, send, now = () => new D
     }
   }
 
+  async function notifyOpportunities(getRadar: () => Promise<RadarSnapshot>) {
+    if (!send) return { created: 0 }
+    const snapshot = await getRadar()
+    const opportunities = buyOpportunities(snapshot)
+    let created = 0
+    for (const o of opportunities) {
+      const id = opportunityId(o)
+      if (read().episodes.some(e => e.id === id)) continue
+      const stamp = now().toISOString()
+      const amount = o.amountCad == null ? '' : ` · C${o.amountCad.toLocaleString('en-CA', { maximumFractionDigits: 2 })}`
+      const alert: AlertCandidate = { id, kind: 'opportunity', symbol: o.symbol, date: null, severity: 'BUY OPPORTUNITY', movePct: null,
+        title: `${o.action === 'BUY MORE' ? '🟢 BUY MORE' : '🟢 BUY'} · ${o.symbol.replace(/\.(NE|TO)$/, '')}`,
+        body: `${o.action}${amount}. ${o.reason} Open Finance Manager → Why? No trade was placed.` }
+      const episodes = update(list => [...list, { ...alert, createdAt: stamp, updatedAt: stamp, delivery: { status: 'pending', attempts: 0, lastAttemptAt: null, error: null } }].slice(-2000))
+      await deliver(episodes); created++
+    }
+    return { created }
+  }
+
   async function sendTest() {
     if (!send) throw new Error('Phone alerts are not set up. Add NTFY_TOPIC to .env.local and restart.')
     await send({ title: 'Radar test · connection only', body: 'Finance Manager reached this phone. This is a manual delivery test, not a market signal. Live alerts will name the instrument, the observed change and the reason to review.', priority: 2, tags: ['white_check_mark'] })
   }
 
-  return { check, status, sendTest }
+  return { check, status, sendTest, notifyOpportunities }
 }
 
 // Runs a scan shortly after start and then hourly. Daily closes change once a
 // day, and a replayed scan never resends an episode.
-export function scheduleRadarAlerts(alerts: ReturnType<typeof createRadarAlerts>, log: (line: string) => void, everyMs = 3_600_000) {
+export function scheduleRadarAlerts(alerts: ReturnType<typeof createRadarAlerts>, log: (line: string) => void, everyMs = 3_600_000, getRadar?: () => Promise<RadarSnapshot>) {
   const run = () => alerts.check()
-    .then(r => { if (r.created || r.escalated || !r.sourceRead) log(`Radar alerts: ${r.created} new, ${r.escalated} escalated${r.sourceRead ? '' : ', portfolio unreadable'}`) })
+    .then(async r => { if (r.created || r.escalated || !r.sourceRead) log(`Radar alerts: ${r.created} new, ${r.escalated} escalated${r.sourceRead ? '' : ', portfolio unreadable'}`); if (getRadar) { const o = await alerts.notifyOpportunities(getRadar); if (o.created) log(`Radar opportunities: ${o.created} new BUY alert(s)`) } })
     .catch(e => log(`Radar alerts failed: ${e instanceof Error ? e.message : e}`))
   const first = setTimeout(run, 30_000)
   const timer = setInterval(run, everyMs)
