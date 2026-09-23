@@ -103,8 +103,20 @@ ownership/capital reconciliation and the XEQT Benchmark Lab. Current-holdings
 cost-basis figures are ESTIMATE; exact alpha requires verified matching cash
 flows and total-return data. No old cash figure is assumed to be total capital.
 
-Live quote/news scanning, scheduling and push delivery are not connected to this
-app yet. Existing cloud task settings are unchanged. Modules with missing
+With `NTFY_TOPIC` configured, the always-on preview service checks owned positions'
+recorded daily closes hourly and sends ntfy warnings for moves of at least 3%.
+The message names the instrument, move, close date and source; it asks for a
+review rather than treating a price move as a trade signal. Unchanged close
+episodes stay quiet across scans and restarts; a higher severity may alert again.
+Two consecutive unreadable StockStream checks trigger one monitoring alert until
+a successful read. Manual delivery tests are labeled as tests. Set a private
+20–64 character random `NTFY_TOPIC` in `.env.local`, optionally `NTFY_SERVER`
+and `NTFY_TOKEN`, then restart `npm run serve` to use these server-side settings.
+The phone must subscribe to the same topic. The alert state is kept in the
+private `.radar/alerts.json` file; retain it across restarts to keep deduplication.
+
+Intraday quote/news scanning and automated BUY/SELL recommendations are not
+connected. Existing cloud task settings are unchanged. Modules with missing
 definitions/evidence remain unknown. The assistant explains the server's Radar
 verdict; it does not invent one. See [the operating contract](docs/strike-radar-elite.md)
 for evidence requirements, private files and compatibility CLI usage.

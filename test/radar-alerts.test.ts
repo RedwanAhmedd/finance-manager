@@ -1,4 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -50,9 +51,9 @@ describe('Alert delivery', () => {
   afterEach(() => { dirs.splice(0).forEach(d => rmSync(d, { recursive: true, force: true })) })
   const setup = (send: (m: PushMessage) => Promise<void>) => {
     const directory = mkdtempSync(join(tmpdir(), 'radar-alerts-')); dirs.push(directory)
-    let current = stock(94.5)
+    let current: StockSnapshot | null = stock(94.5)
     const alerts = createRadarAlerts({ directory, getStock: async () => current, send, now: () => now })
-    return { alerts, directory, setStock: (s: StockSnapshot) => { current = s } }
+    return { alerts, directory, setStock: (s: StockSnapshot | null) => { current = s }, getStock: async () => current }
   }
 
   it('persists an episode before delivering it, and never resends it', async () => {
@@ -87,6 +88,52 @@ describe('Alert delivery', () => {
     expect(send).toHaveBeenCalledTimes(2)
     expect(alerts.status()).toMatchObject({ failing: false, recent: [{ delivery: 'delivered' }] })
   })
+  it('alerts once after two unreadable checks, survives a restart, and rearms after recovery', async () => {
+    const send = vi.fn(async () => {})
+    const { alerts, directory, setStock, getStock } = setup(send)
+    await alerts.check()
+    expect(send).toHaveBeenCalledTimes(1) // The owned-position move.
+    setStock(null)
+    expect(await alerts.check()).toMatchObject({ sourceRead: false, created: 0 })
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(await alerts.check()).toMatchObject({ sourceRead: false, created: 1 })
+    expect(send).toHaveBeenCalledTimes(2)
+    expect((send.mock.calls[1] as unknown as [PushMessage])[0]).toMatchObject({
+      title: 'Radar · StockStream unavailable',
+      body: expect.stringContaining('Last reliable check: 2026-09-24T21:00:00.000Z'),
+    })
+    const restarted = createRadarAlerts({ directory, getStock, send, now: () => now })
+    await restarted.check()
+    expect(send).toHaveBeenCalledTimes(2)
+    setStock(stock(94.5))
+    await restarted.check()
+    expect(send).toHaveBeenCalledTimes(2) // Recovery is quiet.
+    setStock(null)
+    await restarted.check()
+    await restarted.check()
+    expect(send).toHaveBeenCalledTimes(3)
+    expect(JSON.parse(readFileSync(join(directory, 'alerts.json'), 'utf8')).episodes
+      .filter((e: { id: string }) => e.id.startsWith('degraded|source|'))).toHaveLength(2)
+  })
+  it('does not send an outage warning for one transient failed check', async () => {
+    const send = vi.fn(async () => {})
+    const { alerts, setStock } = setup(send)
+    setStock(null)
+    await alerts.check()
+    setStock(stock(100))
+    await alerts.check()
+    expect(send).not.toHaveBeenCalled()
+    expect(alerts.status().recent).toEqual([])
+  })
+  it('labels manual delivery tests clearly without claiming a market signal', async () => {
+    const send = vi.fn(async () => {})
+    const { alerts } = setup(send)
+    await alerts.sendTest()
+    expect((send.mock.calls[0] as unknown as [PushMessage])[0]).toMatchObject({
+      title: 'Radar test · connection only', priority: 2,
+      body: expect.stringContaining('not a market signal'),
+    })
+  })
   it('refuses a tampered store instead of resending', async () => {
     const { alerts, directory } = setup(async () => {})
     await alerts.check()
@@ -94,6 +141,18 @@ describe('Alert delivery', () => {
     const { writeFileSync } = await import('node:fs')
     writeFileSync(path, readFileSync(path, 'utf8').replace('HIGH ALERT', 'WARNING'))
     await expect(alerts.check()).rejects.toThrow('integrity')
+  })
+  it('reads an existing alert store without the new last-reliable field', async () => {
+    const send = vi.fn(async () => {})
+    const { alerts, directory } = setup(send)
+    await alerts.check()
+    const path = join(directory, 'alerts.json')
+    const { episodes } = JSON.parse(readFileSync(path, 'utf8'))
+    const digest = createHash('sha256').update(JSON.stringify({ schemaVersion: 1, episodes })).digest('hex')
+    writeFileSync(path, JSON.stringify({ schemaVersion: 1, episodes, digest }))
+    await alerts.check()
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(readFileSync(path, 'utf8')).lastReliableAt).toBe(now.toISOString())
   })
 })
 
