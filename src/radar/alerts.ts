@@ -47,7 +47,7 @@ export function ownedPositionAlerts(stock: StockSnapshot | null, now = new Date(
     alerts.push({
       id: `move|${symbol}|${c.date}`, kind: 'move', symbol, date: c.date, severity, movePct: Math.round(movePct * 10) / 10,
       title: `${ticker} ${arrow}${Math.abs(movePct).toFixed(1)}% · ${severity}`,
-      body: `${symbol} closed ${price(c.close, c.currency)} on ${shortDate(c.date)}, ${movePct < 0 ? 'down' : 'up'} from ${price(c.previousClose, c.currency)} on ${shortDate(c.previousDate)} (StockStream daily close). Cause: UNRESOLVED. Action: WAIT. Review the thesis; this is not a buy or sell signal.`,
+      body: `${symbol} closed ${price(c.close, c.currency)} on ${shortDate(c.date)}, ${movePct < 0 ? 'down' : 'up'} from ${price(c.previousClose, c.currency)} on ${shortDate(c.previousDate)} (${c.source ?? 'StockStream'} daily close). Cause: UNRESOLVED. Action: WAIT. Review the thesis; this is not a buy or sell signal.`,
     })
   }
   // One deduplicated episode while owned positions cannot be watched; a new one

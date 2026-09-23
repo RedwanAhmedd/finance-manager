@@ -63,7 +63,7 @@ export interface Holding {
   asOf: string | null
 }
 // The exact instrument's two latest recorded daily closes (never an underlying's).
-export interface DailyClose { symbol: string; currency: string | null; date: string; close: number; previousDate: string | null; previousClose: number | null }
+export interface DailyClose { symbol: string; currency: string | null; date: string; close: number; previousDate: string | null; previousClose: number | null; source?: 'StockStream' | 'TMX Money' }
 export interface StockSnapshot {
   fetchedAt: string
   holdings: Holding[]
