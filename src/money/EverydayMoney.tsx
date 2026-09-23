@@ -1,16 +1,14 @@
-import { useMemo, useState, type FormEvent } from 'react'
-import { buildPersonalBooks } from '../books/personal'
+import { useState, type FormEvent } from 'react'
+import type { PersonalBooks } from '../books/personal'
 import { monthlyEquivalent } from './categorise'
 import type { SuggestedBill } from './lines'
 import { CADENCES, CATEGORIES, type Bill, type MoneyData } from './types'
-import type { TreasuryBalance } from '../live/models'
+import { cad as formatCad, categoryLabel as words, monthLabel as label } from '../format'
 
 export type MoneyState = (MoneyData & { suggestions: SuggestedBill[] }) | null
 type View = 'month' | 'log' | 'bills' | 'draws'
 
-const cad = (n: number | null | undefined) => n == null ? '—' : `${n < 0 ? '−' : ''}C$${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-const label = (ym: string) => new Date(`${ym}-01T00:00:00Z`).toLocaleString('en-CA', { month: 'short', year: 'numeric', timeZone: 'UTC' })
-const words = (s: string) => s.replace('_', ' / ')
+const cad = (n: number | null | undefined) => formatCad(n, '—')
 
 async function post<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
@@ -22,15 +20,10 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 // Personal money in Canada: what was spent, recorded bills, statement imports,
 // lines to review and draws from the rental business. Records only; the
 // advisor above explains them.
-export default function EverydayMoney({ money, treasury, error, onChanged }: { money: MoneyState; treasury: TreasuryBalance[]; error: string; onChanged: () => void }) {
+export default function EverydayMoney({ money, books, error, onChanged }: { money: MoneyState; books: PersonalBooks | null; error: string; onChanged: () => void }) {
   const [view, setView] = useState<View>('month')
-  const books = useMemo(() => money ? buildPersonalBooks(money, new Date(), treasury) : null, [money, treasury])
 
-  return <section className="panel money" aria-label="Everyday money">
-    <div className="panel-heading">
-      <div><div className="eyebrow">Canada · personal</div><h2>Everyday money</h2></div>
-      <span className="system-tag">CAD</span>
-    </div>
+  return <section className="money" aria-label="Everyday money">
     {error ? <p className="error small" role="alert">{error}</p> : !money || !books ? <p className="muted">Reading personal records…</p> : <>
       <div className="money-tabs" role="tablist">
         {([['month', 'This month'], ['log', 'Log spending'], ['bills', `Bills (${books.bills.active.length})`], ['draws', 'Draws & balances']] as [View, string][])
@@ -44,23 +37,28 @@ export default function EverydayMoney({ money, treasury, error, onChanged }: { m
   </section>
 }
 
-function MonthView({ books }: { books: ReturnType<typeof buildPersonalBooks> }) {
+function MonthView({ books }: { books: PersonalBooks }) {
   if (!books.recordsSince) return <p className="muted">No spending recorded yet. Log purchases in Log spending.</p>
   const current = books.months[books.months.length - 1]
-  const categories = Object.entries(current?.byCategory ?? {}).sort((a, b) => b[1] - a[1])
+  const categories = Object.entries(current?.byCategory ?? {}).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
+  const topCategory = categories[0]?.[1] ?? 0
+  const peak = Math.max(1, ...books.months.map(m => m.spending))
   return <>
-    <div className="mini-grid">
-      <div><span>Spent this month · day {books.pace.day}</span><strong>{cad(books.pace.thisMonth)}</strong></div>
-      <div><span>Last month by the same day</span><strong>{cad(books.pace.lastMonthSameDay)}</strong></div>
-      <div><span>Recorded bills · monthly equivalent</span><strong>{cad(books.bills.monthlyTotal)}</strong></div>
-      <div><span>Draws received this month</span><strong>{cad(current?.draws)}</strong></div>
+    <div className="stat-row">
+      <div><span>Spent · day {books.pace.day}</span><strong>{cad(books.pace.thisMonth)}</strong></div>
+      <div><span>Bills per month</span><strong>{cad(books.bills.monthlyTotal)}</strong></div>
+      <div><span>Draws this month</span><strong>{cad(current?.draws)}</strong></div>
     </div>
-    {categories.length > 0 && <div className="account-list">{categories.map(([c, v]) => <div className="account-row" key={c}><span>{words(c)}</span><strong>{cad(v)}</strong></div>)}</div>}
-    <div className="holdings-table-wrap"><table className="holdings-table">
-      <thead><tr><th>Month</th><th>Spending</th><th>Draws</th><th>Net</th></tr></thead>
-      <tbody>{[...books.months].reverse().map(m => <tr key={m.month}><td>{label(m.month)}{m.complete ? '' : ' · in progress'}</td><td>{cad(m.spending)}</td><td>{cad(m.draws)}</td><td>{cad(m.net)}</td></tr>)}</tbody>
-    </table></div>
-    <p className="muted small">Spending is net of refunds and leaves out transfers between your own accounts and investment purchases. Records since {books.recordsSince}.</p>
+    {categories.length > 0 && <ul className="category-bars">{categories.map(([c, v]) =>
+      <li key={c}><span>{words(c)}</span><div className="bar"><span style={{ width: `${(v / topCategory) * 100}%` }} /></div><strong className="num">{cad(v)}</strong></li>)}
+    </ul>}
+    <div className="month-chart" role="img" aria-label="Spending by month">
+      {books.months.map(m => <div key={m.month} className={m.complete ? '' : 'in-progress'} title={`${label(m.month)}: ${cad(m.spending)}${m.complete ? '' : ' so far'}`}>
+        <span style={{ height: `${Math.max(2, (m.spending / peak) * 100)}%` }} />
+        <small>{label(m.month).split(' ')[0]}</small>
+      </div>)}
+    </div>
+    <p className="muted small">Net of refunds; transfers between your own accounts and investment purchases are left out. Records since {books.recordsSince}.</p>
   </>
 }
 
@@ -101,7 +99,7 @@ function BillsView({ bills, suggestions, onChanged }: { bills: Bill[]; suggestio
   </>
 }
 
-function LogSpendingView({ books, onChanged }: { books: ReturnType<typeof buildPersonalBooks>; onChanged: () => void }) {
+function LogSpendingView({ books, onChanged }: { books: PersonalBooks; onChanged: () => void }) {
   const blank = { date: books.asOf, amount: '', category: 'groceries', description: '' }
   const [form, setForm] = useState(blank)
   const [status, setStatus] = useState('')
@@ -123,7 +121,7 @@ function LogSpendingView({ books, onChanged }: { books: ReturnType<typeof buildP
   </>
 }
 
-function DrawsView({ books, onChanged }: { books: ReturnType<typeof buildPersonalBooks>; onChanged: () => void }) {
+function DrawsView({ books, onChanged }: { books: PersonalBooks; onChanged: () => void }) {
   const [form, setForm] = useState({ date: books.asOf, amount_cad: '', amount_bdt: '', note: '' })
   const [status, setStatus] = useState('')
   const submit = async (e: FormEvent) => {

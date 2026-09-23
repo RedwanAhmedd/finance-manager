@@ -62,6 +62,8 @@ export interface Holding {
   priceSource: 'cash record' | 'manual' | 'quote' | 'issuer derived' | 'estimated' | 'unavailable'
   asOf: string | null
 }
+// The exact instrument's two latest recorded daily closes (never an underlying's).
+export interface DailyClose { symbol: string; currency: string | null; date: string; close: number; previousDate: string | null; previousClose: number | null; source?: 'StockStream' | 'TMX Money' }
 export interface StockSnapshot {
   fetchedAt: string
   holdings: Holding[]
@@ -72,6 +74,7 @@ export interface StockSnapshot {
   corePct: number | null
   contributedYtdCad: number | null
   issues: string[]
+  closes?: DailyClose[]
   books?: StockBooks
 }
 export function number(value: unknown, label = 'Source value'): number {

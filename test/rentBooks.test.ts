@@ -84,6 +84,15 @@ describe('RentStream books', () => {
     expect(text).not.toContain('would add')
     expect(text).toContain('Most tenants do not pay rent for their last two months; their deposit covers it.')
   })
+  it('ranks months so the model does not scan tables or invent months', () => {
+    const text = renderRentBooks(books)
+    expect(text).toContain('Never fill in, repeat or estimate a month that is not listed.')
+    expect(text).toContain('- Utilities billed to tenants: highest Aug 2026 ৳3,000; lowest Jul 2026 ৳2,000.')
+    expect(text).toContain('- Rent billed: the same in every month, ৳22,000.')
+    expect(text).toContain('only one complete month has expense records (Aug 2026, surplus ৳11,900), so months cannot be ranked by surplus or profit yet.')
+    expect(text).toContain('Expenses by category, total over 1 complete month: Aug 2026: 1. salary ৳4,000; 2. other ৳2,500. The largest expense is the first of these. Utilities billed to tenants are recovered from them, so they are not an expense of the business. With only one complete month, whether an expense recurs cannot be confirmed yet.')
+    expect(text).not.toContain('Sep 2026 ৳')
+  })
   it('renders every amount with its currency and explains how to read it', () => {
     const text = renderRentBooks(books)
     expect(text).toContain('The "Sep 2026" bill is the rent for August 2026')

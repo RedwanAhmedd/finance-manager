@@ -31,7 +31,7 @@ export default function Connection({ source, client, onSession }: { source: Sour
     if (error) setError(error.message)
   }
   return <article className="panel connection">
-    <div className="panel-heading"><h2>{source}</h2><span className="system-tag">{user ? 'SIGNED IN' : 'CONNECT'}</span></div>
+    <div className="panel-heading"><h2>{source}</h2><span className="chip">{user ? 'SIGNED IN' : 'CONNECT'}</span></div>
     {!client ? <p>Connection not configured. Add the source URL and publishable key in .env.local.</p> : user ?
       <div className="connected-row"><span>{user}</span><button onClick={() => void signOut()}>Disconnect</button></div> :
       <form onSubmit={signIn} className="connection-form">

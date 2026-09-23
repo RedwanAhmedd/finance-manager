@@ -2,9 +2,9 @@ import http from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createAssistantHandler } from '../server/assistant'
-import { holdingNames, isTradeQuestion, parseRequest, TRADE_REMINDER, type AssistantRequest } from '../server/prompt'
+import { FORECAST_REMINDER, holdingNames, isForecastQuestion, isTradeQuestion, parseRequest, TRADE_REMINDER, type AssistantRequest } from '../server/prompt'
 import { anthropicParams, fitConversation, ollamaProvider, providerFromEnv, type Provider } from '../server/providers'
-import { assistantContext, assistantSummary } from '../src/assistant/context'
+import { assistantContext, assistantSummary, quickAnswers } from '../src/assistant/context'
 import { streamAssistant } from '../src/assistant/stream'
 import type { RentSnapshot, StockSnapshot } from '../src/live/models'
 
@@ -104,6 +104,41 @@ describe('Buy/sell/hold safeguard', () => {
   })
 })
 
+describe('No-forecast safeguard', () => {
+  it('recognises questions about the future', () => {
+    expect(isForecastQuestion('What will my portfolio be worth by the end of next year?')).toBe(true)
+    expect(isForecastQuestion('How much will I have in 5 years?')).toBe(true)
+    expect(isForecastQuestion('What is my portfolio worth right now?')).toBe(false)
+    expect(isForecastQuestion('How much rent is still to collect?')).toBe(false)
+  })
+  it('puts the forecast rule beside the question', () => {
+    const request = { mode: 'chat' as const, context: 'figures', messages: [{ role: 'user' as const, content: 'What will my portfolio be worth next year?' }] }
+    expect((anthropicParams(request).messages[0] as { content: string }).content).toBe(`What will my portfolio be worth next year?\n\n(${FORECAST_REMINDER})`)
+  })
+})
+
+describe('Quick answers', () => {
+  it('names each figure the way the page does, in its own currency', () => {
+    const text = quickAnswers(rent, stock, { rate: 87.5, asOf: '2026-09-15', source: 'test' }, null)
+    expect(text).toContain('Rent still to collect this month (unpaid on this collection month\'s bills): ৳50.00')
+    expect(text).toContain('Overdue from earlier months, separately: ৳200.00')
+    expect(text).toContain('Safe to invest')
+    expect(text).toContain('৳950.00 (≈ C$10.86 at 1 CAD = ৳87.50, 2026-09-15)')
+    expect(text).toContain('Business credit-card debt: ৳100.00')
+  })
+  it('keeps unknown figures unknown and leaves out sources that were not read', () => {
+    const text = quickAnswers({ ...rent, strategicDeployableBdt: null }, stock, null, null)
+    expect(text).toContain('Safe to invest (business money after card debt, a three-month reserve and family money): unknown.')
+    expect(text).toContain('Investments (StockStream portfolio, including brokerage cash): unknown.')
+    expect(text).not.toContain('Spent this month')
+    expect(quickAnswers(null, null, null, null)).toBe('')
+  })
+  it('sits in the assistant document after the fixed guides', () => {
+    const doc = assistantContext(rent, stock)
+    expect(doc.indexOf('# Quick answers')).toBeGreaterThan(doc.indexOf('# How to read'))
+  })
+})
+
 describe('Ollama provider', () => {
   const tags = (names: string[]) => new Response(JSON.stringify({ models: names.map(name => ({ name })) }))
   it('explains what is missing', async () => {
@@ -187,5 +222,20 @@ describe('Assistant endpoint', () => {
     const base = await serve(fake({ async *stream() { throw new Error('boom') } }))
     await expect(streamAssistant({ mode: 'briefing', context: 'figures' }, () => {}, new AbortController().signal, (input, init) => fetch(`${base}${input}`, init)))
       .rejects.toThrow('The assistant failed unexpectedly.')
+  })
+})
+
+describe('Radar section for the assistant', () => {
+  it('sends the missing live feeds as a design limit, not an issue', async () => {
+    const { withRadar } = await import('../server/assistant')
+    const doc = await withRadar('figures', async () => ({
+      version: 'x', fetchedAt: '2026-09-23T00:00:00Z', coverage: { portfolio: true, liveMarket: false, news: false, notifications: false },
+      candidates: [], benchmark: null, issues: ['Live market and news monitoring are not connected. Push delivery is not connected to this app.', 'Journal is empty.'],
+    }) as never)
+    const radar = JSON.parse(doc.split('# Server-verified Strike Radar\n')[1])
+    expect(radar.issues).toEqual(['Journal is empty.'])
+    expect(radar.limitsByDesign).toContain('not a problem to report')
+    expect(radar.portfolioSourceFresh).toBe(true)
+    expect(doc).not.toContain('liveMarket')
   })
 })

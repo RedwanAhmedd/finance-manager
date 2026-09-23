@@ -2,7 +2,7 @@ import type { RentSnapshot, StockSnapshot } from '../live/models'
 import { RENT_GUIDE, renderRentBooks } from '../books/renderRent'
 import { STOCK_GUIDE, renderStockBooks } from '../books/renderStock'
 import { buildOverview, renderOverview, type FxReference } from '../books/overview'
-import { buildPersonalBooks } from '../books/personal'
+import { buildPersonalBooks, type PersonalBooks } from '../books/personal'
 import { PERSONAL_GUIDE, renderPersonalBooks } from '../books/renderPersonal'
 import type { MoneyData } from '../money/types'
 import type { SuggestedBill } from '../money/lines'
@@ -75,6 +75,24 @@ export function assistantSummary(rent: RentSnapshot | null, stock: StockSnapshot
   }
 }
 
+// The page's own figures under the page's own names, each with the question it
+// answers. Small models pick the wrong row from the full books (for example
+// comparing all collections with this month's billing); a named, ready answer
+// removes that guess. The books below explain each figure.
+export function quickAnswers(rent: RentSnapshot | null, stock: StockSnapshot | null, fx: FxReference | null, personal: PersonalBooks | null): string {
+  const inCad = (n: number | null | undefined) => n != null && fx ? ` (≈ ${cad(Math.round(n / fx.rate * 100) / 100)} at 1 CAD = ৳${fx.rate.toFixed(2)}, ${fx.asOf})` : ''
+  const lines = [
+    personal && `- Spent this month (Canada, personal, day ${personal.pace.day}): ${cad(personal.pace.thisMonth)}. Last month by the same day: ${cad(personal.pace.lastMonthSameDay)}.`,
+    personal && `- Bills coming up (recorded bills due in the next 30 days): ${cad(personal.bills.dueNext30DaysTotal)}${personal.bills.dueNext30Days.length ? `: ${personal.bills.dueNext30Days.map(b => `${b.name} ${cad(b.amount)} on ${b.date}`).join('; ')}` : ''}.`,
+    rent && `- Money in Canada (cash in the owner's Canadian accounts, recorded in RentStream): ${cad(rent.treasuryCashCad ?? null)}.`,
+    stock && `- Investments (StockStream portfolio, including brokerage cash): ${cad(stock.portfolioCad)}.`,
+    rent && `- Rent still to collect this month (unpaid on this collection month's bills): ${bdt(rent.outstandingBdt)}. Billed ${bdt(rent.expectedBdt)}, settled ${bdt(rent.collectedBdt)}. Overdue from earlier months, separately: ${bdt(rent.overdueBdt)}.`,
+    rent && `- Safe to invest (business money after card debt, a three-month reserve and family money): ${bdt(rent.strategicDeployableBdt)}${inCad(rent.strategicDeployableBdt)}.`,
+    rent && `- Business credit-card debt: ${bdt(rent.cardDebtBdt)}.`,
+  ].filter(Boolean)
+  return lines.length ? `# Quick answers\nWhen a question matches one of these, answer with that figure exactly as written here, in its currency. Use the books below only for detail.\n${lines.join('\n')}` : ''
+}
+
 // The document the assistant reads: the dashboard summary, then the full
 // books for each source that was read.
 export function assistantContext(rent: RentSnapshot | null, stock: StockSnapshot | null, fx: FxReference | null = null, money: (MoneyData & { suggestions?: SuggestedBill[] }) | null = null, now = new Date()): string {
@@ -85,6 +103,7 @@ export function assistantContext(rent: RentSnapshot | null, stock: StockSnapshot
   const withoutGuide = (text: string, guide: string) => text.startsWith(guide) ? text.slice(guide.length).trimStart() : text
   return [
     `# How to read the owner's records\n${[RENT_GUIDE, PERSONAL_GUIDE, STOCK_GUIDE].join('\n\n')}`,
+    quickAnswers(rent, stock, fx, personal),
     fx ? `# ${renderOverview(buildOverview(rent, stock, fx, personal)).slice(3)}` : '# Overview across both countries\nNo CAD/BDT reference rate is available, so the two sides cannot be compared in one currency.',
     rent?.books ? `# Bangladesh: RentStream books\n${withoutGuide(renderRentBooks(rent.books), RENT_GUIDE)}` : '',
     personal ? `# Canada: personal money\n${withoutGuide(renderPersonalBooks(personal), PERSONAL_GUIDE)}` : '',

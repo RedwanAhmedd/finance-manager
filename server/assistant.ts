@@ -1,3 +1,4 @@
+import type { RadarSnapshot } from '../src/radar/types'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
@@ -37,9 +38,32 @@ function sameOrigin(req: IncomingMessage): boolean {
   return !origin || origin === `http://${req.headers.host}`
 }
 
+// Radar decisions come from this server, not from an assistant guess or a
+// client-supplied claim that a research gate passed.
+const RADAR_DESIGN_LIMIT = /live market|news monitoring|push delivery/i
+
+export async function withRadar(context: string, radarSnapshot: () => Promise<RadarSnapshot>): Promise<string> {
+  let radar: unknown
+  try {
+    const snap = await radarSnapshot()
+    // Radar has no live market, news or alert feed by design. Sent as an issue, a
+    // small model reports it as a problem in every briefing; it is a fixed limit.
+    radar = {
+      version: snap.version, asOf: snap.fetchedAt, portfolioSourceFresh: snap.coverage.portfolio,
+      candidates: snap.candidates.map(c => c.decision), benchmark: snap.benchmark,
+      issues: snap.issues.filter(i => !RADAR_DESIGN_LIMIT.test(i)),
+      limitsByDesign: `Radar checks saved research against the portfolio. It has no live market or news feed${snap.coverage.notifications ? '; owned-position alerts to the owner\'s phone use daily closes' : ' and no alert delivery'}. That is how it is built, not a problem to report.`,
+    }
+  } catch { radar = { action: 'WAIT', reason: 'Radar could not verify its records.' } }
+  return `${context}
+
+# Server-verified Strike Radar
+${JSON.stringify(radar)}`
+}
+
 // saveContextTo (development only) writes the latest document the model was given,
 // so its understanding can be tested against the source database.
-export function createAssistantHandler(provider: Provider, { saveContextTo }: { saveContextTo?: string } = {}) {
+export function createAssistantHandler(provider: Provider, { saveContextTo, radarSnapshot }: { saveContextTo?: string; radarSnapshot?: () => Promise<RadarSnapshot> } = {}) {
   // A briefing depends only on the figures. The local model handles one request
   // at a time, so every page load or open tab writing its own briefing queued the
   // owner's questions behind minutes of work. A finished briefing is kept per
@@ -65,6 +89,7 @@ export function createAssistantHandler(provider: Provider, { saveContextTo }: { 
 
     let request: AssistantRequest
     try { request = parseRequest(await readBody(req)) } catch (error) { return json(400, { error: errorText(error) }) }
+    if (radarSnapshot) request = { ...request, context: await withRadar(request.context, radarSnapshot) }
     if (saveContextTo) await writeFile(saveContextTo, request.context).catch(() => {})
     const setup = await provider.check()
     if (setup) return json(503, { error: setup })

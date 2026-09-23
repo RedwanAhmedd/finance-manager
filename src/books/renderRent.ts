@@ -56,6 +56,30 @@ Other income items: ${b.otherIncome.map(o => `${label(o.month)}: ${o.items.join(
 
   const ranked = (title: string, rows: [string, number][], fmt: (n: number) => string = bdt) =>
     `${title}: ${[...rows].sort((x, y) => y[1] - x[1]).map(([name, v], i) => `${i + 1}. ${name} ${fmt(v)}`).join('; ')}.`
+
+  // Small models cannot reliably find the highest or lowest row of a long table,
+  // and fill in months that have no records. Extremes are computed here instead.
+  const extremes = (rows: [string, number][]) => {
+    const values = rows.map(r => r[1])
+    const max = Math.max(...values), min = Math.min(...values)
+    const at = (v: number) => rows.filter(r => r[1] === v).map(r => r[0]).join(' and ')
+    return max === min ? `the same in every month, ${bdt(max)}` : `highest ${at(max)} ${bdt(max)}; lowest ${at(min)} ${bdt(min)}`
+  }
+  const byMonth = (value: (m: typeof done[number]) => number): [string, number][] => done.map(m => [label(m.month), value(m)])
+  const results = b.operatingResult.filter(r => r.complete)
+  const costMonths = b.expenses.filter(e => e.complete)
+  const categoryTotals = Object.entries(costMonths.reduce<Record<string, number>>((t, e) => { for (const [k, v] of Object.entries(e.byCategory)) t[k] = (t[k] ?? 0) + v; return t }, {}))
+  const costSpan = `${costMonths.length} complete month${costMonths.length === 1 ? '' : 's'}: ${costMonths.map(e => label(e.month)).join(', ')}`
+  sections.push(`### Months ranked
+Only months that appear in these books have records. Never fill in, repeat or estimate a month that is not listed.
+${done.length ? `Completed collection months, ${label(done[0].month)} to ${label(done[done.length - 1].month)} (${done.length} months; the month in progress is left out; each is labelled by collection month):
+- Total billed: ${extremes(byMonth(m => m.rentBilled + m.utilitiesBilled))}.
+- Rent billed: ${extremes(byMonth(m => m.rentBilled))}.
+- Utilities billed to tenants: ${extremes(byMonth(m => m.utilitiesBilled))}.
+- Collected: ${extremes(byMonth(m => m.collected))}.` : 'No completed collection month yet.'}
+Operating surplus (profit after expenses): ${results.length >= 2 ? `${extremes(results.map(r => [label(r.month), r.surplus]))} (complete months only).` : results.length === 1 ? `only one complete month has expense records (${label(results[0].month)}, surplus ${bdt(results[0].surplus)}), so months cannot be ranked by surplus or profit yet. Expenses are recorded since ${b.expensesRecordedSince}.` : 'no complete month has expense records yet, so months cannot be ranked by surplus or profit.'}
+${categoryTotals.length ? `${ranked(`Expenses by category, total over ${costSpan}`, categoryTotals)} The largest expense is the first of these. Utilities billed to tenants are recovered from them, so they are not an expense of the business.${costMonths.length < 2 ? ' With only one complete month, whether an expense recurs cannot be confirmed yet.' : ''}` : 'Expenses by category: no complete month of expense records yet.'}`)
+
   sections.push(`### Buildings ranked (largest first)
 ${ranked('By tenant deposits held', b.properties.map(p => [p.name, p.refundableDeposits]))}
 ${ranked('By monthly rent roll', b.properties.map(p => [p.name, p.monthlyRentRoll]))}
@@ -84,7 +108,7 @@ When current tenants' rent was last set (last rent change, or move-in if never c
 - Rent not changed for ${o.longUnchangedRent.years}+ years: ${o.longUnchangedRent.tenants} current tenants paying ${bdt(o.longUnchangedRent.monthlyRent)} a month in rent together. Occupancy is ${pct(Math.round(b.properties.reduce((s, p) => s + p.tenants, 0) / Math.max(1, b.properties.reduce((s, p) => s + p.units, 0)) * 1000) / 10)}.
 - Re-letting in the last 12 months: ${o.relets.tenants} new tenants; ${o.relets.withPreviousTenant} replaced a previous tenant in the same unit. Rent went up for ${o.relets.rentUp}, stayed the same for ${o.relets.rentSame}, went down for ${o.relets.rentDown}; combined change ${bdt(o.relets.monthlyRentChange)} a month. Units stood empty ${o.relets.averageVacantDays ?? 'unknown'} days on average between tenants, about ${bdt(o.relets.rentLostWhileVacant)} of rent not earned.
 - Latest complete month's operating surplus: ${o.latestCompleteSurplus ? `${bdt(o.latestCompleteSurplus.surplus)} (${label(o.latestCompleteSurplus.month)}; only one complete expense month exists, so this is not yet a trend)` : 'not available'}.
-- Capital allocation (RentStream account roles): allocation-eligible cash ${bdt(o.allocation.allocationEligible)} (corporate operating, savings and personal accounts plus operating cash); family-restricted cash ${bdt(o.allocation.familyRestricted)} set apart for family use (${bdt(o.allocation.familyMonthlyOutflow)} a month protected); unclassified cash ${bdt(o.allocation.unclassified)} excluded until its role is confirmed. After card debt and a three-month operating reserve (${bdt(o.allocation.operatingReserveTarget)}, three times the last 30 days of recorded expenses), strategic deployable cash is ${bdt(o.allocation.strategicDeployable)}.`)
+- Capital allocation (RentStream account roles): allocation-eligible cash ${bdt(o.allocation.allocationEligible)} (corporate operating, savings and personal accounts plus operating cash); family-restricted cash ${bdt(o.allocation.familyRestricted)} set apart for family use (${bdt(o.allocation.familyMonthlyOutflow)} a month protected); unclassified cash ${bdt(o.allocation.unclassified)} excluded until its role is confirmed. After card debt and a three-month operating reserve (${bdt(o.allocation.operatingReserveTarget)}, three times the last 30 days of recorded expenses), strategic deployable cash (shown on the page as "Safe to invest") is ${bdt(o.allocation.strategicDeployable)}.`)
 
   return sections.join('\n\n')
 }

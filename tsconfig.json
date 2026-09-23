@@ -17,5 +17,5 @@
     "noEmit": true,
     "jsx": "react-jsx"
   },
-  "include": ["src", "server", "test", "vite.config.ts"]
+  "include": ["src", "server", "test", "eval", "vite.config.ts", "vitest.eval.config.ts"]
 }
