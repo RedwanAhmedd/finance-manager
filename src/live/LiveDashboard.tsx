@@ -101,7 +101,6 @@ export default function LiveDashboard() {
   const issues = [...(rent?.issues ?? []), ...(stock?.issues ?? [])]
   const snapshotStale = [rent?.fetchedAt, stock?.fetchedAt].some(t => t && isStale(t, now, 1/24))
   const personal = useMemo(() => money ? buildPersonalBooks(money, now, rent?.treasury ?? []) : null, [money, now, rent])
-  const canadianAccounts = (rent?.treasury ?? []).filter(a => a.currency === 'CAD')
   const nextBills = personal?.bills.dueNext30Days ?? []
   const needsSetup = permanent !== null && (!(permanent.rentstream || rentUser) || !(permanent.stockstream || stockUser))
   return <main className="shell">
