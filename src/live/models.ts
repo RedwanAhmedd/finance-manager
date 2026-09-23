@@ -64,6 +64,7 @@ export interface Holding {
 }
 // The exact instrument's two latest recorded daily closes (never an underlying's).
 export interface DailyClose { symbol: string; currency: string | null; date: string; close: number; previousDate: string | null; previousClose: number | null; source?: 'StockStream' | 'TMX Money' }
+export interface ResearchInstrument { symbol: string; underlyingSymbol: string | null; displayName: string | null }
 export interface StockSnapshot {
   fetchedAt: string
   holdings: Holding[]
@@ -76,6 +77,7 @@ export interface StockSnapshot {
   issues: string[]
   closes?: DailyClose[]
   books?: StockBooks
+  researchInstruments?: ResearchInstrument[]
 }
 export function number(value: unknown, label = 'Source value'): number {
   if (value === null || value === undefined || value === '' || typeof value === 'boolean') throw new Error(`${label} is missing`)
