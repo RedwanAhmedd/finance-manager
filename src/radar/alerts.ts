@@ -5,10 +5,10 @@ import type { StockSnapshot } from '../live/models'
 // matching severity only, gains and losses alike. A threshold starts a review; it
 // never means BUY MORE, TRIM or SELL, so every alert says WAIT.
 
-export type Severity = 'WARNING' | 'HIGH ALERT' | 'CRITICAL REVIEW' | 'MONITORING DEGRADED'
+export type Severity = 'WARNING' | 'HIGH ALERT' | 'CRITICAL REVIEW' | 'MONITORING DEGRADED' | 'BUY OPPORTUNITY'
 export interface AlertCandidate {
   id: string
-  kind: 'move' | 'degraded'
+  kind: 'move' | 'degraded' | 'opportunity'
   symbol: string | null
   date: string | null
   severity: Severity
@@ -17,7 +17,7 @@ export interface AlertCandidate {
   body: string
 }
 
-export const RANK: Record<Severity, number> = { 'MONITORING DEGRADED': 0, WARNING: 1, 'HIGH ALERT': 2, 'CRITICAL REVIEW': 3 }
+export const RANK: Record<Severity, number> = { 'MONITORING DEGRADED': 0, WARNING: 1, 'HIGH ALERT': 2, 'CRITICAL REVIEW': 3, 'BUY OPPORTUNITY': 4 }
 // Daily closes: a weekend plus a holiday is four calendar days.
 const MAX_CLOSE_AGE_DAYS = 4
 
