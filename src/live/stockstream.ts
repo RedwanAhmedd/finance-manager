@@ -72,7 +72,6 @@ export function normalizeStock(raw: StockRaw, now = new Date()): StockSnapshot {
   const core = sum(holdings.filter(h => h.role === 'core'))
   const settings = raw.settings.length === 1 ? raw.settings[0] : null
   if (settings?.base_currency !== 'CAD') issues.push('Contribution settings are unavailable or not denominated in CAD.')
-  issues.push('No verified actionable STRIKE feed is connected; no investment signal is inferred from holdings.')
   return {
     fetchedAt: now.toISOString(), holdings, portfolioCad, investedCad, cashCad,
     cashAsOf: cashRows.map(h => h.asOf).sort()[0] ?? null,

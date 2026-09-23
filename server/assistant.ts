@@ -1,3 +1,4 @@
+import type { RadarSnapshot } from '../src/radar/types'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
@@ -39,7 +40,7 @@ function sameOrigin(req: IncomingMessage): boolean {
 
 // saveContextTo (development only) writes the latest document the model was given,
 // so its understanding can be tested against the source database.
-export function createAssistantHandler(provider: Provider, { saveContextTo }: { saveContextTo?: string } = {}) {
+export function createAssistantHandler(provider: Provider, { saveContextTo, radarSnapshot }: { saveContextTo?: string; radarSnapshot?: () => Promise<RadarSnapshot> } = {}) {
   // A briefing depends only on the figures. The local model handles one request
   // at a time, so every page load or open tab writing its own briefing queued the
   // owner's questions behind minutes of work. A finished briefing is kept per
@@ -65,6 +66,16 @@ export function createAssistantHandler(provider: Provider, { saveContextTo }: { 
 
     let request: AssistantRequest
     try { request = parseRequest(await readBody(req)) } catch (error) { return json(400, { error: errorText(error) }) }
+    // Radar decisions come from this server, not from an assistant guess or a
+    // client-supplied claim that a research gate passed.
+    if (radarSnapshot) {
+      let radar: unknown
+      try {
+        const snap = await radarSnapshot()
+        radar = { version: snap.version, asOf: snap.fetchedAt, coverage: snap.coverage, candidates: snap.candidates.map(c => c.decision), benchmark: snap.benchmark, issues: snap.issues }
+      } catch { radar = { action: 'WAIT', reason: 'Radar could not verify its records.' } }
+      request = { ...request, context: request.context + '\n\n# Server-verified Strike Radar\n' + JSON.stringify(radar) }
+    }
     if (saveContextTo) await writeFile(saveContextTo, request.context).catch(() => {})
     const setup = await provider.check()
     if (setup) return json(503, { error: setup })

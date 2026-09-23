@@ -4,3 +4,6 @@ dist
 .env.*
 !.env.example
 .DS_Store
+
+# Private research, portfolio evidence and prospective Radar history
+.radar/

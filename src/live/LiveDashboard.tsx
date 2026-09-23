@@ -1,3 +1,4 @@
+import RadarPanel from '../radar/RadarPanel'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { clients } from './client'
 import Connection from './Connections'
@@ -120,12 +121,13 @@ export default function LiveDashboard() {
       <MetricCard label="Business money free to invest" value={!rent && r.loading ? '…' : bdt(rent?.strategicDeployableBdt)} note={rent?.strategicDeployableBdt != null && fx ? `≈ ${cad(rent.strategicDeployableBdt / fx.rate)} · after card debt, 3 months of costs and family money` : 'After card debt, 3 months of costs and family money'} />
     </section>
 
+    <RadarPanel />
     <AssistantPanel rent={rent} stock={stock} fx={fx} money={money} reading={reading} />
     <EverydayMoney money={money} treasury={rent?.treasury ?? []} error={moneyError} onChanged={loadMoney} />
 
     <details className="section-fold">
       <summary><span>How "free to invest" is worked out</span><span className="muted small">Reserves, family money and the rules</span></summary>
-      {rent ? <section className="two-col"><CapitalView rent={rent} stock={stock ?? null} /><article className="panel"><div className="eyebrow">The rules</div><h2>Money gets a job before it gets invested</h2><ol className="input-gaps"><li>Keep three months of the business's recorded costs.</li><li>Keep family money out of what can be invested.</li><li>Leave out accounts whose purpose isn't set yet.</li><li>Only put money into a single stock when StockStream's Strike Radar clears it on its own.</li><li>Nothing moves money or makes a trade without your approval.</li></ol><p className="muted small">New surplus, once the rules above are met, splits 50% core / 25% strike reserve / 15% flexible / 10% free. Money already saved is not swept into that split automatically.</p></article></section> : <p className="muted">Needs RentStream.</p>}
+      {rent ? <section className="two-col"><CapitalView rent={rent} stock={stock ?? null} /><article className="panel"><div className="eyebrow">The rules</div><h2>Money gets a job before it gets invested</h2><ol className="input-gaps"><li>Keep three months of the business's recorded costs.</li><li>Keep family money out of what can be invested.</li><li>Leave out accounts whose purpose isn't set yet.</li><li>Only put money into a single stock when Finance Manager's Strike Radar clears it on its own.</li><li>Nothing moves money or makes a trade without your approval.</li></ol><p className="muted small">New surplus, once the rules above are met, splits 50% core / 25% strike reserve / 15% flexible / 10% free. Money already saved is not swept into that split automatically.</p></article></section> : <p className="muted">Needs RentStream.</p>}
     </details>
     <details className="section-fold" open={needsSetup}>
       <summary><span>Connections and data checks</span><span className="muted small">{issues.length ? `${issues.length} note${issues.length === 1 ? '' : 's'}` : 'All clear'}</span></summary>
@@ -137,6 +139,6 @@ export default function LiveDashboard() {
       <div className="attention-list">{issues.length ? issues.map((issue,i) => <div className="attention-row" key={i}>{issue}</div>) : <p className="muted small">No data warnings.</p>}</div>
     </details>
 
-    <footer>Finance Manager · cannot move money or place trades · reads RentStream and StockStream without changing them · saves only the bills, spending and draws you record</footer>
+    <footer>Finance Manager · cannot move money or place trades · reads RentStream and StockStream without changing them · saves your research, bills, spending and draws</footer>
   </main>
 }

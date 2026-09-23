@@ -7,9 +7,9 @@ User
   |
 ChatGPT (conversation + orchestration)
   |
-Finance Manager (read-only coordination + scenarios + approval-only recommendations)
+Finance Manager (Strike Radar + read-only coordination + approval-only recommendations)
   |-- RentStream adapter  -> RentStream (rental/treasury source of truth)
-  `-- StockStream adapter -> StockStream (investment source of truth + Strike Radar state)
+  `-- StockStream adapter -> StockStream (portfolio / brokerage source of truth)
 ```
 
 ## Responsibilities
@@ -18,10 +18,10 @@ Finance Manager (read-only coordination + scenarios + approval-only recommendati
 Source of truth for rental income, properties, treasury/bank cash, reserves, obligations and property expenses.
 
 ### StockStream
-Source of truth for portfolio positions, brokerage cash, transactions, investment risk, Strike Radar research/signals and exact-instrument state.
+Source of truth for portfolio positions, brokerage cash, transactions and source price/instrument records. Its saved manual STRIKE assessments remain historical research; it does not own the active Radar.
 
 ### Finance Manager
-Normalizes the two systems, computes liquidity, applies cross-system allocation policy, runs scenarios and returns approval-only recommendations. It must not duplicate either source ledger.
+Owns Strike Radar research, evidence gates, the prospective decision journal, alert policy and capital-allocation decisions. It normalizes both source systems, computes liquidity and runs scenarios. All recommendations require user approval; Finance Manager must not duplicate either source ledger or execute trades.
 
 ### ChatGPT
 Turns user intent into read-only questions/scenarios, explains Finance Manager results in plain language, coordinates follow-up research, and can surface Strike Radar alerts. ChatGPT must not treat conversation memory as live portfolio/cash truth when Finance Manager/its source adapters can provide fresher authoritative state.
@@ -61,7 +61,9 @@ The transport must not receive database credentials merely to expose these opera
 
 ## Strike Radar relationship
 
-Strike Radar belongs to the StockStream investment domain. Finance Manager may read its latest qualified alerts/opportunities and portfolio-risk state. ChatGPT may explain those alerts alongside the household liquidity picture. Finance Manager must not weaken Strike Radar BUY/SELL gates, and Strike Radar must not assume deployable cash without current Finance Manager/source evidence.
+Finance Manager is the single Strike Radar home. The migrated v4 core retains its evidence gates and conservative default; the [ELITE operating contract](strike-radar-elite.md) defines the broader research, benchmark and alert policy. A policy module is not evidence of an implemented live feed or a passed check.
+
+StockStream provides read-only portfolio, cash, trade, quote and instrument evidence. RentStream provides rental/treasury context for protected cash. Radar must not infer ownership from a watchlist, infer available capital from planned deposits, or weaken its BUY/SELL gates. ChatGPT may explain Finance Manager decisions and coordinate research, but must not create a second independent Radar or present unverified alert delivery as operational.
 
 ## Remaining deployment boundary
 

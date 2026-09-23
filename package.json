@@ -7,8 +7,11 @@
     "dev": "vite",
     "serve": "./scripts/serve.sh",
     "build": "tsc --noEmit && vite build",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.radar.json",
+    "test": "vitest run",
+    "radar": "node scripts/radar-v4.ts",
+    "radar:check": "node test/radar-v4-check.ts && node test/radar-runner-check.ts",
+    "check": "npm test && npm run radar:check && npm run typecheck"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",

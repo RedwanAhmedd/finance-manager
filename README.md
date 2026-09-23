@@ -4,7 +4,7 @@ Finance Manager is a personal financial advisor across two countries: everyday m
 
 - **RentStream owns:** rental billing, receipts, expenses, reconciliation, Bangladesh bank/cash records with their financial roles, tenant deposit records, and treasury cash snapshots such as the owner's Canadian (TD) bank balances.
 - **StockStream owns:** holdings, trades, recorded brokerage cash, quotes, and investment settings.
-- **Finance Manager owns:** the combined view and advisor, plus the owner's personal records (bills, logged spending, draws, statement imports). Those are stored in `money_*` tables inside the StockStream database (the Supabase account's free projects are in use) and are reachable only by this app's local server.
+- **Finance Manager owns:** Strike Radar research, decision gates, journal, alert policy and capital allocation, the combined view and advisor, plus the owner's personal records (bills, logged spending, draws, statement imports). Those are stored in `money_*` tables inside the StockStream database (the Supabase account's free projects are in use) and are reachable only by this app's local server.
 
 ## Run locally
 
@@ -66,7 +66,7 @@ The endpoint rejects cross-origin requests and non-JSON bodies. A refresh, sign-
 
 The app issues GET requests only to explicitly listed data resources, including one approved stable cash RPC. Its fetch wrapper rejects other data methods, arbitrary RPCs, Edge Functions, and unexpected origins. Authentication permits sign-in, token refresh, user verification, and local-session sign-out.
 
-Source reads stay GET-only. This is an application behavior constraint, **not a separately provisioned read-only database role**: the signed-in source JWT retains the existing source user's permissions, enforced by that project's RLS. The wrapper is not a security boundary against someone modifying the browser code. The permanent connection uses each project's secret key on the local server, under the same GET-only allowlist. Personal records are the only writes, and only to the `money_*` tables.
+Source reads stay GET-only. This is an application behavior constraint, **not a separately provisioned read-only database role**: the signed-in source JWT retains the existing source user's permissions, enforced by that project's RLS. The wrapper is not a security boundary against someone modifying the browser code. The permanent connection uses each project's secret key on the local server, under the same GET-only allowlist. Personal records write only to the `money_*` tables. Radar research writes only to the private local `.radar/` journal; it cannot write to a source ledger or broker.
 
 ## Code map
 
@@ -92,3 +92,21 @@ npm audit
 ```
 
 Tests cover statement boundaries, future transactions, card credit exclusion, deposit liabilities, billing/receipt separation, missing bills and values, trade-derived shares, CDR/FX behavior, stale cash, data pagination, source failures, and forbidden writes. Unit tests use synthetic data only. Private source snapshots and local credentials must not be committed.
+
+## Strike Radar ELITE
+
+Strike Radar now lives here at http://127.0.0.1:5177. Its default action is WAIT.
+The compact panel has a research importer and worksheet export under **Research
+& checks**; saving requires an explicit click and verifies the local journal.
+The preserved v4 checks are supplemented by dated ELITE module reviews, fresh
+ownership/capital reconciliation and the XEQT Benchmark Lab. Current-holdings
+cost-basis figures are ESTIMATE; exact alpha requires verified matching cash
+flows and total-return data. No old cash figure is assumed to be total capital.
+
+Live quote/news scanning, scheduling and push delivery are not connected to this
+app yet. Existing cloud task settings are unchanged. Modules with missing
+definitions/evidence remain unknown. The assistant explains the server's Radar
+verdict; it does not invent one. See [the operating contract](docs/strike-radar-elite.md)
+for evidence requirements, private files and compatibility CLI usage.
+
+Run `npm run check` for all app and migrated Radar checks, then `npm run build`.

@@ -1,3 +1,4 @@
+import { RADAR_MANDATE } from '../src/radar/mandate'
 // Instructions and request validation shared by every AI provider.
 const MAX_TURNS = 40
 const MAX_TURN_CHARS = 8_000
@@ -20,18 +21,18 @@ The current figures are in <financial_snapshot>. RentStream is the owner's recon
 What you can do: summarize where things stand; explain where the money went; point out bills, subscriptions and spending changes; do affordability arithmetic on recorded figures (this month's spending so far, bills still due by their recorded day, draws received, cash on record); help set reserve targets, budgets and a contribution plan; point out concentration, stale data and missing records; explain Canadian account types (TFSA, FHSA, RRSP) and general principles in general terms.
 
 Limits:
-- Never tell the owner to buy, sell or hold a specific stock or fund, and never predict prices. That includes answering "yes" or "no" to a buy/sell/hold question, even when asked for only yes or no. Instead say, in one sentence, that this call is theirs, then help with what surrounds it: what the holding is, its share of the portfolio, and the trade-offs to weigh. You can describe holdings and concentration freely.
-- Do not project or forecast: no future portfolio values, growth or returns, no "by the goal date you will have", no future rent or income. Describe what the records show has happened.
+- Explain a specific BUY, BUY MORE, HOLD, TRIM or SELL only when it appears in the server-verified Strike Radar section. If its evidence is absent, stale or blocked, say WAIT and the missing check. Do not invent or upgrade a verdict, allocation, price, cash balance or benchmark result. User-provided figures can support research but cannot bypass the server gates.
+- Distinguish research assumptions/scenarios from facts. Never promise returns or certainty, extrapolate future wealth from a goal, or project unrecorded income.
 - You cannot move money, pay anyone or place trades; Finance Manager has no ability to do that.
 - For tax or legal specifics, give general information and suggest confirming with a professional before filing or signing anything.
 
-Formatting: short paragraphs and "- " bullet lists. Use "### " headings only in briefings. Bold with **double asterisks** sparingly. No tables.`
+Formatting: short paragraphs and "- " bullet lists. Use "### " headings only in briefings. Bold with **double asterisks** sparingly. No tables.\n\n${RADAR_MANDATE}`
 
 export const BRIEFING_REQUEST = `Write my briefing from the current snapshot. Use exactly these three headings:
 ### This month's spending
 ### Where things stand
 ### Needs attention
-Two to four bullets under each. Put the most important point first in each section. If no personal spending is recorded yet, say so in one bullet under the first heading. Under 250 words in total.`
+One short bullet under each. Put the most important point first in each section. If no personal spending is recorded yet, say so in one bullet under the first heading. Under 100 words in total. Mention Radar only for a verified action or a material coverage issue.`
 
 // Small models follow a rule stated beside the question far better than one
 // stated pages earlier. A question about trading a specific holding gets the
@@ -39,7 +40,7 @@ Two to four bullets under each. Put the most important point first in each secti
 // conversation the owner sees is unchanged.
 const TRADE_WORDS = /\b(buy|sell|hold|keep|dump|trim|swap|switch|add to|get rid of|cash out|exit)\b/i
 const SECURITY_WORDS = /\b(stocks?|shares?|etfs?|funds?|cdrs?|position|holding)\b|\b[A-Z]{2,5}(\.[A-Z]{2})?\b/
-export const TRADE_REMINDER = 'Answering rule: this asks for a decision on a specific stock or fund. Do not answer yes or no, and do not say which way to go. Say in one sentence that this call is the owner\'s, then give the relevant facts from the records.'
+export const TRADE_REMINDER = 'Use only the server-verified Strike Radar action for a specific stock or fund. If none is verified, say WAIT and name the missing check. Never invent a trade, price, size or available capital.'
 // Holdings named in the books ("MSFT.NE | Microsoft CDR (CAD Hedged) | satellite"),
 // so "sell Microsoft" is caught as well as "sell MSFT".
 export function holdingNames(context: string): string[] {
