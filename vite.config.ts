@@ -1,4 +1,7 @@
-import { defineConfig, loadEnv, type Plugin } from 'vite'
+import { resolve } from 'node:path'
+import type { StockSnapshot } from './src/live/models'
+import { createRadarHandler, createRadarService } from './server/radar.ts'
+import { defineConfig, loadEnv, type Connect, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import { createAssistantHandler } from './server/assistant.ts'
 import { providerFromEnv } from './server/providers.ts'
@@ -10,19 +13,16 @@ import { createMoneyHandler, moneyStoreFromEnv } from './server/money.ts'
 // Secret keys and assistant settings have no VITE_ prefix, so Vite never
 // places them in the browser bundle.
 function localServer(env: Record<string, string>): Plugin {
-  const assistantHandler = createAssistantHandler(providerFromEnv(env), { saveContextTo: env.ASSISTANT_SAVE_CONTEXT || undefined })
-  const sourcesHandler = createSourcesHandler(sourcesFromEnv(env))
+  const sources = sourcesFromEnv(env)
+  const radar = createRadarService(resolve(env.RADAR_DIRECTORY || '.radar'), async () => (await sources.stockstream?.getSnapshot() as StockSnapshot | undefined) ?? null)
+  const radarHandler = createRadarHandler(radar)
+  const assistantHandler = createAssistantHandler(providerFromEnv(env), { saveContextTo: env.ASSISTANT_SAVE_CONTEXT || undefined, radarSnapshot: radar.snapshot })
+  const sourcesHandler = createSourcesHandler(sources)
   const fxHandler = createFxHandler(createFxSource())
   const moneyHandler = createMoneyHandler(moneyStoreFromEnv(env))
-  return {
-    name: 'finance-manager-local-server',
-    configureServer(server) {
-      server.middlewares.use((req, res, next) => void moneyHandler(req, res, () => void fxHandler(req, res, () => void sourcesHandler(req, res, () => void assistantHandler(req, res, next)))))
-    },
-    configurePreviewServer(server) {
-      server.middlewares.use((req, res, next) => void moneyHandler(req, res, () => void fxHandler(req, res, () => void sourcesHandler(req, res, () => void assistantHandler(req, res, next)))))
-    },
-  }
+  const handlers = [radarHandler, moneyHandler, fxHandler, sourcesHandler, assistantHandler]
+  const install = (server: { middlewares: Connect.Server }) => { for (const handler of handlers) server.middlewares.use((req, res, next) => void handler(req, res, next)) }
+  return { name: 'finance-manager-local-server', configureServer: install, configurePreviewServer: install }
 }
 
 export default defineConfig(({ mode }) => ({
