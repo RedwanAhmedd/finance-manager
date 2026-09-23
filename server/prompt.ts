@@ -40,7 +40,11 @@ One short bullet under each. Put the most important point first in each section.
 // conversation the owner sees is unchanged.
 const TRADE_WORDS = /\b(buy|sell|hold|keep|dump|trim|swap|switch|add to|get rid of|cash out|exit)\b/i
 const SECURITY_WORDS = /\b(stocks?|shares?|etfs?|funds?|cdrs?|position|holding)\b|\b[A-Z]{2,5}(\.[A-Z]{2})?\b/
-export const TRADE_REMINDER = 'Use only the server-verified Strike Radar action for a specific stock or fund. If none is verified, say WAIT and name the missing check. Never invent a trade, price, size or available capital.'
+export const TRADE_REMINDER = 'Answering rule for this question: do not answer yes or no, and do not decide buy, sell or hold yourself, even if asked for one word. If the server-verified Strike Radar section has a verified action for this holding, explain that action. Otherwise begin your answer with "WAIT" and name the missing Radar check. Never invent a trade, price, size or available capital.'
+// Questions about the future get the no-forecast rule beside them for the same reason.
+const FUTURE_WORDS = /\b(will (it|my|the|i|we|this|that)|going to (be|have|grow|make)|by (the )?(end of )?(next|20\d\d)|in \d+ (years?|months?)|next year|future|forecast|predict|projection|project(ed)? (to|value)|grow to|expected return|how much will)\b/i
+export const FORECAST_REMINDER = 'Answering rule for this question: it asks about the future. Say plainly that you do not forecast values, growth or returns. Do not estimate or extrapolate from recent contributions or gains. Then give what the records show today: the current value, what has been contributed and any recorded gain, with their dates.'
+export const isForecastQuestion = (text: string) => FUTURE_WORDS.test(text)
 // Holdings named in the books ("MSFT.NE | Microsoft CDR (CAD Hedged) | satellite"),
 // so "sell Microsoft" is caught as well as "sell MSFT".
 export function holdingNames(context: string): string[] {

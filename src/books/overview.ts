@@ -74,7 +74,7 @@ Reference rate: 1 CAD = ৳${r.toFixed(2)} (1 BDT = C$${(1 / r).toFixed(5)}), da
 - Cash after card debt: ${both(b.cashAfterDebt, r)}.
 - Tenant deposits held ${both(b.depositsHeld, r)}: revolving, normally used as departing tenants' final two months of rent and replaced by new tenants' deposits, so not set aside.
 - Family-restricted cash (kept for family use, not deployable): ${both(b.familyRestricted, r)}.
-- Strategic deployable cash after card debt, a three-month operating reserve (${both(b.operatingReserveTarget, r)}) and excluding family-restricted and unclassified accounts: ${both(b.strategicDeployable, r)}.
+- Safe to invest (strategic deployable cash; the page's "Safe to invest"): ${both(b.strategicDeployable, r)}. This is what remains after card debt, a three-month operating reserve (${both(b.operatingReserveTarget, r)}) and excluding family-restricted and unclassified accounts. When the owner asks what is safe or free to invest, use this figure, not cash after card debt.
 - Latest complete month's operating surplus: ${b.latestMonthlySurplus ? `${both(b.latestMonthlySurplus.amount, r)} (${b.latestMonthlySurplus.month}, the only complete month so far)` : 'unknown'}.`)
   else lines.push('Bangladesh: RentStream not read.')
   if (c) lines.push(`Canada (investments):

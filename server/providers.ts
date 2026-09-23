@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { BRIEFING_REQUEST, SYSTEM_PROMPT, TRADE_REMINDER, isTradeQuestion, type AssistantRequest, type Turn } from './prompt.ts'
+import { BRIEFING_REQUEST, FORECAST_REMINDER, SYSTEM_PROMPT, TRADE_REMINDER, isForecastQuestion, isTradeQuestion, type AssistantRequest, type Turn } from './prompt.ts'
 
 // A provider streams reply text and finally returns why it stopped:
 // 'end_turn', 'max_tokens', 'refusal', or null when the model does not say.
@@ -16,8 +16,9 @@ const snapshotBlock = (request: AssistantRequest) => `<financial_snapshot>\n${re
 const conversation = (request: AssistantRequest): Turn[] => {
   if (request.mode === 'briefing') return [{ role: 'user', content: BRIEFING_REQUEST }]
   const last = request.messages[request.messages.length - 1]
-  return isTradeQuestion(last.content, request.context)
-    ? [...request.messages.slice(0, -1), { role: 'user', content: `${last.content}\n\n(${TRADE_REMINDER})` }]
+  const reminders = [isTradeQuestion(last.content, request.context) && TRADE_REMINDER, isForecastQuestion(last.content) && FORECAST_REMINDER].filter(Boolean)
+  return reminders.length
+    ? [...request.messages.slice(0, -1), { role: 'user', content: `${last.content}\n\n${reminders.map(r => `(${r})`).join('\n')}` }]
     : request.messages
 }
 
