@@ -110,10 +110,7 @@ checks, exact-instrument shock checks, and a cash-flow-matched XEQT calculator.
 These validate supplied evidence and attestations; they do not authenticate the
 contents of a URL or independently implement every research methodology.
 
-The app does **not** currently fetch an intraday quote/news feed or discover new
-companies autonomously. Its always-on preview service checks owned-position
-daily closes hourly and can send ntfy move and monitoring warnings when configured;
-these are separate from ELITE research recommendations.
+The always-on preview service now performs a conservative autonomous discovery pass over exact Canadian CDRs already present in StockStream's watchlist. It checks TMX daily closes hourly and can send one deduplicated **research-candidate** alert when an exact listing moves at least 3% between traded closes. This is intentionally not called a BUY: price movement alone cannot satisfy ELITE, XEQT, catalyst, valuation, news, cash or portfolio gates. Existing reviewed ELITE BUY/BUY MORE decisions can send deduplicated ntfy alerts. A true autonomous BUY from a brand-new idea still requires a trustworthy live quote/news/fundamentals research provider; none is silently invented.
 Missing inherited module definitions remain unknown. The cloud task and its
 notification settings have not been changed by this code migration. Do not
 report local checks as proof of cloud execution or device delivery.
@@ -124,8 +121,7 @@ The assistant may explain only server-verified Radar decisions. A missing,
 stale, mismatched or corrupt dossier/review yields WAIT. Each successful app
 save creates a v4 research run plus a checksum-linked ELITE receipt containing
 the source snapshot and decision at save time. GET rechecks the decision at the
-current time, without writing a retrospective signal. No ELITE buy or sell push alerts are
-sent. The app suppresses legacy v4 paper signals; the compatibility CLI retains
+current time, without writing a retrospective signal. ELITE BUY/BUY MORE push alerts are sent only after the existing server-verified gates clear; Radar never sends a trade order. The app suppresses legacy v4 paper signals; the compatibility CLI retains
 its original paper-cohort behavior. Those paper records are not ELITE alerts.
 
 ### Files and commands
