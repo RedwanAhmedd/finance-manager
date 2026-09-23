@@ -77,8 +77,8 @@ export default function AssistantPanel({ rent, stock, fx, money, reading }: { re
 
   return <section className="panel assistant" aria-label="Financial assistant">
     <div className="panel-heading">
-      <div><div className="eyebrow">Assistant</div><h2>Your financial briefing</h2></div>
-      <span className="system-tag">{typeof status === 'object' ? status.model.toUpperCase() : 'AI'}</span>
+      <div><div className="eyebrow">Your advisor</div><h2>Today's briefing</h2></div>
+      <span className="chip">{typeof status === 'object' ? status.model : 'AI'}</span>
     </div>
 
     {status === 'checking' ? <p className="muted">Checking the assistant…</p>
