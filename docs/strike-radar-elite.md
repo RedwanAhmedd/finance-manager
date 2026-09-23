@@ -110,8 +110,10 @@ checks, exact-instrument shock checks, and a cash-flow-matched XEQT calculator.
 These validate supplied evidence and attestations; they do not authenticate the
 contents of a URL or independently implement every research methodology.
 
-The app does **not** currently fetch an intraday quote/news feed, discover new
-companies autonomously, run on a schedule, or deliver push notifications.
+The app does **not** currently fetch an intraday quote/news feed or discover new
+companies autonomously. Its always-on preview service checks owned-position
+daily closes hourly and can send ntfy move and monitoring warnings when configured;
+these are separate from ELITE research recommendations.
 Missing inherited module definitions remain unknown. The cloud task and its
 notification settings have not been changed by this code migration. Do not
 report local checks as proof of cloud execution or device delivery.
@@ -122,7 +124,7 @@ The assistant may explain only server-verified Radar decisions. A missing,
 stale, mismatched or corrupt dossier/review yields WAIT. Each successful app
 save creates a v4 research run plus a checksum-linked ELITE receipt containing
 the source snapshot and decision at save time. GET rechecks the decision at the
-current time, without writing a retrospective signal. No ELITE push alerts are
+current time, without writing a retrospective signal. No ELITE buy or sell push alerts are
 sent. The app suppresses legacy v4 paper signals; the compatibility CLI retains
 its original paper-cohort behavior. Those paper records are not ELITE alerts.
 

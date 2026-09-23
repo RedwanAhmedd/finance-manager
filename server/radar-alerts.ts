@@ -9,8 +9,13 @@ import type { StockSnapshot } from '../src/live/models.ts'
 // decision. Replays never resend; only a higher severity in the same episode does.
 
 export type Delivery = { status: 'pending' | 'delivered' | 'failed'; attempts: number; lastAttemptAt: string | null; error: string | null }
-export interface Episode extends AlertCandidate { createdAt: string; updatedAt: string; delivery: Delivery }
-interface Store { schemaVersion: 1; episodes: Episode[]; digest: string }
+export interface Episode extends AlertCandidate {
+  createdAt: string; updatedAt: string; delivery: Delivery
+  // Source outages are recorded on the first failed scan, but sent only after
+  // a second failed scan. Resolving one lets a later outage start a new episode.
+  failureCount?: number; lastReliableAt?: string | null; resolvedAt?: string
+}
+interface Store { schemaVersion: 1; episodes: Episode[]; lastReliableAt?: string | null; digest: string }
 export interface PushMessage { title: string; body: string; priority: 1 | 2 | 3 | 4 | 5; tags: string[] }
 export type Send = (message: PushMessage) => Promise<void>
 
@@ -40,22 +45,28 @@ export function createRadarAlerts({ directory, getStock, send, now = () => new D
   const root = resolve(directory), path = resolve(root, 'alerts.json'), lockPath = path + '.lock'
 
   function read(): Store {
-    try { lstatSync(path) } catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return { schemaVersion: 1, episodes: [], digest: '' }; throw e }
+    try { lstatSync(path) } catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return { schemaVersion: 1, episodes: [], lastReliableAt: null, digest: '' }; throw e }
     const stat = lstatSync(path)
     if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 5_000_000) throw new Error('Radar alert store is not a regular file within the size limit.')
     const s = JSON.parse(readFileSync(path, 'utf8')) as Store
-    if (s.schemaVersion !== 1 || !Array.isArray(s.episodes) || s.digest !== hash({ schemaVersion: 1, episodes: s.episodes })) throw new Error('Radar alert store failed its integrity check; restore it before alerts resume.')
+    if (s.schemaVersion !== 1 || !Array.isArray(s.episodes) ||
+      (s.lastReliableAt !== undefined && s.lastReliableAt !== null && (typeof s.lastReliableAt !== 'string' || !Number.isFinite(Date.parse(s.lastReliableAt)))) ||
+      s.digest !== hash({ schemaVersion: 1, episodes: s.episodes, ...(s.lastReliableAt === undefined ? {} : { lastReliableAt: s.lastReliableAt }) }))
+      throw new Error('Radar alert store failed its integrity check; restore it before alerts resume.')
     return s
   }
   // Lock, change, write atomically, read back. Fails closed if another run holds the lock.
-  function update(change: (episodes: Episode[]) => Episode[]): Episode[] {
+  function update(change: (episodes: Episode[], lastReliableAt: string | null) => Episode[], reliableAt?: string): Episode[] {
     mkdirSync(root, { recursive: true, mode: 0o700 })
     let lock: number
     try { lock = openSync(lockPath, 'wx', 0o600) } catch { throw new Error('Radar alert store is locked by another run.') }
     let temp: string | null = null
     try {
-      const episodes = change(read().episodes)
-      const encoded = JSON.stringify({ schemaVersion: 1, episodes, digest: hash({ schemaVersion: 1, episodes }) }, null, 2) + '\n'
+      const previous = read()
+      const episodes = change(previous.episodes, previous.lastReliableAt ?? null)
+      const lastReliableAt = reliableAt ?? previous.lastReliableAt ?? null
+      const encoded = JSON.stringify({ schemaVersion: 1, episodes, lastReliableAt,
+        digest: hash({ schemaVersion: 1, episodes, lastReliableAt }) }, null, 2) + '\n'
       temp = `${path}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`
       const fd = openSync(temp, 'wx', 0o600)
       try { writeFileSync(fd, encoded); fsyncSync(fd) } finally { closeSync(fd) }
@@ -70,7 +81,8 @@ export function createRadarAlerts({ directory, getStock, send, now = () => new D
 
   async function deliver(episodes: Episode[]) {
     if (!send) return
-    for (const e of episodes.filter(e => e.delivery.status === 'pending' || (e.delivery.status === 'failed' && e.delivery.attempts < MAX_ATTEMPTS))) {
+    for (const e of episodes.filter(e => !e.resolvedAt && (e.kind !== 'degraded' || e.failureCount === undefined || e.failureCount >= 2) &&
+      (e.delivery.status === 'pending' || (e.delivery.status === 'failed' && e.delivery.attempts < MAX_ATTEMPTS)))) {
       let error: string | null = null
       try { await send({ title: e.title, body: e.body, priority: PRIORITY[e.severity], tags: [e.kind === 'degraded' ? 'warning' : e.movePct! < 0 ? 'chart_with_downwards_trend' : 'chart_with_upwards_trend'] }) }
       catch (err) { error = err instanceof Error ? err.message : 'Delivery failed' }
@@ -94,15 +106,36 @@ export function createRadarAlerts({ directory, getStock, send, now = () => new D
     const { alerts, covered, uncovered, stale } = ownedPositionAlerts(stock, at)
     const stamp = at.toISOString()
     let created = 0, escalated = 0
-    const episodes = update(list => {
+    const episodes = update((list, lastReliableAt) => {
       const next = [...list]
+      const outage = next.findIndex(e => e.kind === 'degraded' && e.symbol === null && e.id.startsWith('degraded|source|') && !e.resolvedAt)
+      if (!stock) {
+        if (outage < 0) {
+          next.push({
+            id: `degraded|source|${stamp}|${next.length}`, kind: 'degraded', symbol: null, date: null,
+            severity: 'MONITORING DEGRADED', movePct: null,
+            title: 'Radar · StockStream unavailable',
+            body: `Finance Manager cannot read StockStream. Owned-position monitoring is paused. Last reliable check: ${lastReliableAt ?? 'unknown'}. Check the StockStream connection; warnings resume after a successful read. Action: WAIT.`,
+            createdAt: stamp, updatedAt: stamp, failureCount: 1, lastReliableAt,
+            delivery: { status: 'pending', attempts: 0, lastAttemptAt: null, error: null },
+          })
+        } else {
+          const e = next[outage]
+          if ((e.failureCount ?? 0) < 2) {
+            next[outage] = { ...e, failureCount: 2, updatedAt: stamp }
+            created++
+          }
+        }
+      } else if (outage >= 0) {
+        next[outage] = { ...next[outage], resolvedAt: stamp }
+      }
       for (const a of alerts) {
         const i = next.findIndex(e => e.id === a.id)
         if (i < 0) { next.push({ ...a, createdAt: stamp, updatedAt: stamp, delivery: { status: 'pending', attempts: 0, lastAttemptAt: null, error: null } }); created++ }
         else if (RANK[a.severity] > RANK[next[i].severity]) { next[i] = { ...next[i], ...a, updatedAt: stamp, delivery: { status: 'pending', attempts: 0, lastAttemptAt: null, error: null } }; escalated++ }
       }
       return next.slice(-2000)
-    })
+    }, stock ? stamp : undefined)
     await deliver(episodes)
     return { checkedAt: stamp, sourceRead: !!stock, covered, uncovered, stale, created, escalated }
   }
@@ -111,14 +144,15 @@ export function createRadarAlerts({ directory, getStock, send, now = () => new D
     const episodes = read().episodes
     return {
       configured: !!send,
-      failing: episodes.some(e => e.delivery.status === 'failed'),
-      recent: episodes.slice(-5).reverse().map(e => ({ title: e.title, createdAt: e.createdAt, delivery: e.delivery.status })),
+      failing: episodes.some(e => !e.resolvedAt && e.delivery.status === 'failed'),
+      recent: episodes.filter(e => e.failureCount === undefined || e.failureCount >= 2).slice(-5).reverse()
+        .map(e => ({ title: e.title, createdAt: e.createdAt, delivery: e.delivery.status })),
     }
   }
 
   async function sendTest() {
     if (!send) throw new Error('Phone alerts are not set up. Add NTFY_TOPIC to .env.local and restart.')
-    await send({ title: 'Radar test', body: 'Finance Manager can reach this phone. Owned-position warnings will arrive here. Action on every alert: WAIT and review.', priority: 3, tags: ['white_check_mark'] })
+    await send({ title: 'Radar test · connection only', body: 'Finance Manager reached this phone. This is a manual delivery test, not a market signal. Live alerts will name the instrument, the observed change and the reason to review.', priority: 2, tags: ['white_check_mark'] })
   }
 
   return { check, status, sendTest }
