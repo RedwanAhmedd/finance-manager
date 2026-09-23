@@ -42,7 +42,7 @@ async function readBody(req: IncomingMessage) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>
 }
 type AlertStatus = NonNullable<RadarSnapshot['alerts']>
-export function createRadarService(directory: string, getStock: () => Promise<StockSnapshot | null>, alerts?: { status(): AlertStatus; sendTest(): Promise<void> }) {
+export function createRadarService(directory: string, getStock: () => Promise<StockSnapshot | null>, alerts?: { status(): AlertStatus; sendTest(): Promise<void> }, liveResearch = false) {
   const root = resolve(directory), journal = resolve(root, 'journal.json')
   const receipts = resolve(root, 'receipts')
   async function source() { try { return await getStock() } catch { return null } }
@@ -64,9 +64,9 @@ export function createRadarService(directory: string, getStock: () => Promise<St
     // No price/news provider is silently inferred from daily portfolio marks.
     let alertStatus: AlertStatus | undefined
     try { alertStatus = alerts?.status() } catch { issues.push('Radar alert store could not be verified; phone alerts are paused.') }
-    issues.push(alertStatus?.configured
-      ? 'Live market and news monitoring are not connected. Owned-position phone alerts use StockStream daily closes.'
-      : 'Live market and news monitoring are not connected. Push delivery is not connected to this app.')
+    if (!liveResearch) issues.push(alertStatus?.configured
+      ? 'Live news/fundamentals research is not configured; exact-instrument close monitoring remains active.'
+      : 'Live research and push delivery are not configured.')
     if (alertStatus?.failing) issues.push('A phone alert could not be delivered; it will be retried.')
     let benchmark: RadarSnapshot['benchmark'] = benchmarkFromStock(stock, now)
     const benchmarkInput = readJson(resolve(root, 'benchmark.json'))
@@ -75,7 +75,7 @@ export function createRadarService(directory: string, getStock: () => Promise<St
       version: '5.2', fetchedAt: now, status: !sourceFresh ? 'degraded' : state ? 'ready' : 'empty', action: 'WAIT',
       reason: candidates.length ? 'Review the latest entries below.' : 'No reviewed entry yet.', journalExists: state !== null, runCount: state?.runs.length ?? 0, candidates,
       owned: sourceFresh ? stock!.holdings.filter(h => h.role !== 'cash' && h.role !== 'watchlist' && h.shares > 0).map(h => ({ symbol: h.symbol, shares: h.shares, priceDate: h.asOf })) : [],
-      coverage: { portfolio: sourceFresh, liveMarket: false, news: false, notifications: !!alertStatus?.configured && !alertStatus.failing }, alerts: alertStatus, issues, benchmark,
+      coverage: { portfolio: sourceFresh, liveMarket: liveResearch, news: liveResearch, notifications: !!alertStatus?.configured && !alertStatus.failing }, alerts: alertStatus, issues, benchmark,
     }
   }
   async function save(body: Record<string, unknown>) {

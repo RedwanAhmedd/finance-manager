@@ -8,7 +8,7 @@ import type { StockSnapshot } from '../live/models'
 export type Severity = 'WARNING' | 'HIGH ALERT' | 'CRITICAL REVIEW' | 'MONITORING DEGRADED' | 'BUY OPPORTUNITY' | 'RESEARCH CANDIDATE'
 export interface AlertCandidate {
   id: string
-  kind: 'move' | 'degraded' | 'opportunity' | 'discovery'
+  kind: 'move' | 'degraded' | 'opportunity' | 'discovery' | 'research'
   symbol: string | null
   date: string | null
   severity: Severity

@@ -110,7 +110,7 @@ checks, exact-instrument shock checks, and a cash-flow-matched XEQT calculator.
 These validate supplied evidence and attestations; they do not authenticate the
 contents of a URL or independently implement every research methodology.
 
-The always-on preview service now performs a conservative autonomous discovery pass over exact Canadian CDRs already present in StockStream's watchlist. It checks TMX daily closes hourly and can send one deduplicated **research-candidate** alert when an exact listing moves at least 3% between traded closes. This is intentionally not called a BUY: price movement alone cannot satisfy ELITE, XEQT, catalyst, valuation, news, cash or portfolio gates. Existing reviewed ELITE BUY/BUY MORE decisions can send deduplicated ntfy alerts. A true autonomous BUY from a brand-new idea still requires a trustworthy live quote/news/fundamentals research provider; none is silently invented.
+The always-on preview service now performs a conservative autonomous discovery pass over exact Canadian CDRs already present in StockStream's watchlist. It checks TMX daily closes hourly and can send one deduplicated **research-candidate** alert when an exact listing moves at least 3% between traded closes. This is intentionally not called a BUY: price movement alone cannot satisfy ELITE, XEQT, catalyst, valuation, news, cash or portfolio gates. Existing reviewed ELITE BUY/BUY MORE decisions can send deduplicated ntfy alerts. When `FINNHUB_API_KEY` is configured, Radar also reads the verified underlying mapping from StockStream and autonomously checks Finnhub underlying quotes, recent company news and basic financial metrics. It never substitutes an underlying quote for the exact CDR price. Fresh news or a >=3% underlying move can create a deduplicated research episode; this evidence does not invent missing ELITE definitions or automatically pass valuation, catalyst, XEQT, cash, execution or portfolio gates.
 Missing inherited module definitions remain unknown. The cloud task and its
 notification settings have not been changed by this code migration. Do not
 report local checks as proof of cloud execution or device delivery.
@@ -157,3 +157,8 @@ points at every boundary, and explicit costs. Internal stock buys/sales are not
 external flows. Missing inputs withhold the comparison. The server supplies the
 current clock. This file is a benchmark evidence input, not an alert history;
 no historical alert or prospective checkpoint is fabricated from it.
+
+
+### Live research setup
+
+Set `FINNHUB_API_KEY` in the server-only `.env.local` and restart the always-on preview service. The key has no `VITE_` prefix and is never bundled into the browser. Radar then reports live-market/news coverage as connected and scans verified StockStream watchlist/owned mappings hourly. If the provider fails, research remains incomplete rather than being treated as a pass.

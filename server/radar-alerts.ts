@@ -5,6 +5,7 @@ import { ownedPositionAlerts, RANK, type AlertCandidate, type Severity } from '.
 import type { StockSnapshot } from '../src/live/models.ts'
 import type { RadarSnapshot } from '../src/radar/types.ts'
 import { tmxWatchlistMoves } from './tmx.ts'
+import type { ResearchProvider } from './radar-research.ts'
 
 // Radar's alert delivery: each alert episode is persisted and read back before
 // any delivery attempt, and delivery status is recorded separately from the
@@ -95,7 +96,7 @@ export function createRadarAlerts({ directory, getStock, send, now = () => new D
     for (const e of episodes.filter(e => !e.resolvedAt && (e.kind !== 'degraded' || e.failureCount === undefined || e.failureCount >= 2) &&
       (e.delivery.status === 'pending' || (e.delivery.status === 'failed' && e.delivery.attempts < MAX_ATTEMPTS)))) {
       let error: string | null = null
-      try { await send({ title: e.title, body: e.body, priority: PRIORITY[e.severity], tags: [e.kind === 'opportunity' ? 'moneybag' : e.kind === 'discovery' ? 'mag' : e.kind === 'degraded' ? 'warning' : e.movePct! < 0 ? 'chart_with_downwards_trend' : 'chart_with_upwards_trend'] }) }
+      try { await send({ title: e.title, body: e.body, priority: PRIORITY[e.severity], tags: [e.kind === 'opportunity' ? 'moneybag' : e.kind === 'discovery' || e.kind === 'research' ? 'mag' : e.kind === 'degraded' ? 'warning' : e.movePct! < 0 ? 'chart_with_downwards_trend' : 'chart_with_upwards_trend'] }) }
       catch (err) { error = err instanceof Error ? err.message : 'Delivery failed' }
       const at = now().toISOString()
       update(list => list.map(x => x.id === e.id && x.updatedAt === e.updatedAt
@@ -180,6 +181,29 @@ export function createRadarAlerts({ directory, getStock, send, now = () => new D
     return { created }
   }
 
+  async function discoverLiveResearch(provider: ResearchProvider) {
+    if (!send || !provider.configured) return { created: 0 }
+    const stock = await getStock().catch(() => null)
+    if (!stock) return { created: 0 }
+    const symbols = [...new Set([...(stock.books?.watchlist ?? []), ...stock.holdings.filter(h => h.shares > 0 && h.role !== 'cash').map(h => h.symbol)])]
+    const result = await provider.research(stock, symbols, now())
+    let created = 0
+    for (const row of result.rows) {
+      const freshNews = row.news.filter(n => Date.parse(now().toISOString()) - Date.parse(n.publishedAt) <= 24 * 3_600_000)
+      const moved = row.quote && Math.abs(row.quote.movePct) >= 3
+      if (!moved && !freshNews.length) continue
+      const day = now().toISOString().slice(0, 10), id = `research|${row.symbol}|${day}`
+      if (read().episodes.some(e => e.id === id)) continue
+      const stamp = now().toISOString(), move = row.quote ? `${row.quote.movePct >= 0 ? '+' : ''}${row.quote.movePct.toFixed(1)}% underlying move` : 'no verified underlying move'
+      const headline = freshNews[0]?.headline ? ` News: ${freshNews[0].headline}` : ''
+      const alert: AlertCandidate = { id, kind: 'research', symbol: row.symbol, date: day, severity: 'RESEARCH CANDIDATE', movePct: row.quote ? Math.round(row.quote.movePct * 10) / 10 : null,
+        title: `🧠 ${row.symbol.replace(/\.(NE|TO)$/, '')} · live research`, body: `${move}.${headline} Research only: exact CDR price, ELITE, XEQT, cash and portfolio gates must still clear. No trade was placed.` }
+      const episodes = update(list => [...list, { ...alert, createdAt: stamp, updatedAt: stamp, delivery: { status: 'pending', attempts: 0, lastAttemptAt: null, error: null } }].slice(-2000))
+      await deliver(episodes); created++
+    }
+    return { created }
+  }
+
   async function notifyOpportunities(getRadar: () => Promise<RadarSnapshot>) {
     if (!send) return { created: 0 }
     const snapshot = await getRadar()
@@ -204,14 +228,14 @@ export function createRadarAlerts({ directory, getStock, send, now = () => new D
     await send({ title: 'Radar test · connection only', body: 'Finance Manager reached this phone. This is a manual delivery test, not a market signal. Live alerts will name the instrument, the observed change and the reason to review.', priority: 2, tags: ['white_check_mark'] })
   }
 
-  return { check, status, sendTest, notifyOpportunities, discoverWatchlist }
+  return { check, status, sendTest, notifyOpportunities, discoverWatchlist, discoverLiveResearch }
 }
 
 // Runs a scan shortly after start and then hourly. Daily closes change once a
 // day, and a replayed scan never resends an episode.
-export function scheduleRadarAlerts(alerts: ReturnType<typeof createRadarAlerts>, log: (line: string) => void, everyMs = 3_600_000, getRadar?: () => Promise<RadarSnapshot>) {
+export function scheduleRadarAlerts(alerts: ReturnType<typeof createRadarAlerts>, log: (line: string) => void, everyMs = 3_600_000, getRadar?: () => Promise<RadarSnapshot>, research?: ResearchProvider) {
   const run = () => alerts.check()
-    .then(async r => { if (r.created || r.escalated || !r.sourceRead) log(`Radar alerts: ${r.created} new, ${r.escalated} escalated${r.sourceRead ? '' : ', portfolio unreadable'}`); if (getRadar) { const d = await alerts.discoverWatchlist(); if (d.created) log(`Radar discovery: ${d.created} research candidate(s)`); const o = await alerts.notifyOpportunities(getRadar); if (o.created) log(`Radar opportunities: ${o.created} new BUY alert(s)`) } })
+    .then(async r => { if (r.created || r.escalated || !r.sourceRead) log(`Radar alerts: ${r.created} new, ${r.escalated} escalated${r.sourceRead ? '' : ', portfolio unreadable'}`); if (getRadar) { const d = await alerts.discoverWatchlist(); if (d.created) log(`Radar discovery: ${d.created} research candidate(s)`); if (research?.configured) { const live = await alerts.discoverLiveResearch(research); if (live.created) log(`Radar live research: ${live.created} candidate(s)`) }; const o = await alerts.notifyOpportunities(getRadar); if (o.created) log(`Radar opportunities: ${o.created} new BUY alert(s)`) } })
     .catch(e => log(`Radar alerts failed: ${e instanceof Error ? e.message : e}`))
   const first = setTimeout(run, 30_000)
   const timer = setInterval(run, everyMs)
