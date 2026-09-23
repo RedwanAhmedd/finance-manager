@@ -30,7 +30,7 @@ export function buyOpportunities(snapshot: RadarSnapshot): Opportunity[] {
 }
 
 const MAX_ATTEMPTS = 5
-const PRIORITY: Record<Severity, PushMessage['priority']> = { 'MONITORING DEGRADED': 3, WARNING: 3, 'HIGH ALERT': 4, 'CRITICAL REVIEW': 5 }
+const PRIORITY: Record<Severity, PushMessage['priority']> = { 'MONITORING DEGRADED': 3, WARNING: 3, 'HIGH ALERT': 4, 'CRITICAL REVIEW': 5, 'BUY OPPORTUNITY': 4 }
 const hash = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex')
 
 // ntfy delivers to the ntfy iPhone app. Anyone who knows the topic can read it,
@@ -94,7 +94,7 @@ export function createRadarAlerts({ directory, getStock, send, now = () => new D
     for (const e of episodes.filter(e => !e.resolvedAt && (e.kind !== 'degraded' || e.failureCount === undefined || e.failureCount >= 2) &&
       (e.delivery.status === 'pending' || (e.delivery.status === 'failed' && e.delivery.attempts < MAX_ATTEMPTS)))) {
       let error: string | null = null
-      try { await send({ title: e.title, body: e.body, priority: PRIORITY[e.severity], tags: [e.kind === 'degraded' ? 'warning' : e.movePct! < 0 ? 'chart_with_downwards_trend' : 'chart_with_upwards_trend'] }) }
+      try { await send({ title: e.title, body: e.body, priority: PRIORITY[e.severity], tags: [e.kind === 'opportunity' ? 'moneybag' : e.kind === 'degraded' ? 'warning' : e.movePct! < 0 ? 'chart_with_downwards_trend' : 'chart_with_upwards_trend'] }) }
       catch (err) { error = err instanceof Error ? err.message : 'Delivery failed' }
       const at = now().toISOString()
       update(list => list.map(x => x.id === e.id && x.updatedAt === e.updatedAt
