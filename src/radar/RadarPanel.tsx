@@ -76,16 +76,20 @@ export default function RadarPanel() {
   const benchmark = snapshot?.benchmark
   return <section className="panel radar" aria-label="Strike Radar">
     <div className="panel-heading"><div><div className="eyebrow">Finance Manager · ELITE 5.2</div><h2>Strike Radar</h2></div><span className="status status-watch">{loading ? 'CHECKING' : actionable.length ? 'REVIEW' : 'WAIT'}</span></div>
-    <p>{loading ? 'Checking your research…' : error ? 'Radar needs attention.' : actionable.length ? actionable.length === 1 ? '1 reviewed action.' : `${actionable.length} reviewed alternatives. Choose one, then refresh after any portfolio change.` : snapshot?.reason ?? 'No verified entry yet.'}</p>
+    <p>{loading ? 'Checking…' : error ? 'Radar needs attention.' : actionable.length ? actionable.length === 1 ? 'One thing needs your review.' : `${actionable.length} things need your review.` : 'Nothing to do right now.'}</p>
+    {!loading && !error && !actionable.length && <article className="strike-card"><strong>⚪ WAIT</strong><p>No verified opportunity beats doing nothing right now.</p></article>}
     {actionable.map(c => <article className="strike-card" key={c.decision.symbol}>
       <strong>{c.decision.symbol} · {c.decision.action}{c.decision.amountCad != null ? ` · ${money(c.decision.amountCad)}` : ''}</strong>
       <p>{c.decision.reason}</p>
       {c.entryPriceCad != null && <p className="muted">{c.priceSide === 'bid' ? 'Bid' : 'Ask'}: {money(c.entryPriceCad)}{c.priceEvidence.map((e, i) => <span key={`${e.sourceUrl}-${i}`}> · <a href={e.sourceUrl} target="_blank" rel="noreferrer">{new Date(e.asOf).toLocaleString()}</a></span>)}</p>}
     </article>)}
-    <div className="radar-facts"><span>Capital: confirm before sizing</span><span>XEQT: {benchmark?.status === 'EXACT' ? `${money(benchmark.alphaCad!)} relative result (${benchmark.periodStart?.slice(0, 10)}–${benchmark.asOf?.slice(0, 10)})` : benchmark?.status === 'ESTIMATE' ? 'estimate only' : 'comparison pending'}</span></div>
-    <p className="muted small">{snapshot?.owned.length ?? '—'} owned positions · {snapshot?.alerts?.configured ? `Phone alerts on${snapshot.alerts.failing ? ' (a delivery failed; retrying)' : ''}` : 'Phone alerts off'}{snapshot?.alerts?.recent[0] ? ` · Last: ${snapshot.alerts.recent[0].title}, ${new Date(snapshot.alerts.recent[0].createdAt).toLocaleDateString()}` : ''}</p>
-    {snapshot?.alerts?.configured && <button className="link-button" disabled={testing} onClick={() => void sendTest()}>{testing ? 'Sending…' : 'Send test alert to my phone'}</button>}
-    <details><summary>Research &amp; checks</summary>
+    <p className="muted small">{snapshot?.alerts?.configured ? `📱 Phone alerts ON${snapshot.alerts.failing ? ' · retrying a failed delivery' : ''}` : '📵 Phone alerts OFF'} · {snapshot?.owned.length ?? '—'} positions watched</p>
+    <details><summary>Why?</summary>
+      <div className="radar-facts"><span>Capital: confirm before sizing</span><span>XEQT: {benchmark?.status === 'EXACT' ? `${money(benchmark.alphaCad!)} relative result (${benchmark.periodStart?.slice(0, 10)}–${benchmark.asOf?.slice(0, 10)})` : benchmark?.status === 'ESTIMATE' ? 'estimate only' : 'comparison pending'}</span></div>
+      {snapshot?.alerts?.recent[0] && <p className="muted small">Last alert: {snapshot.alerts.recent[0].title} · {new Date(snapshot.alerts.recent[0].createdAt).toLocaleDateString()}</p>}
+      {snapshot?.alerts?.configured && <button className="link-button" disabled={testing} onClick={() => void sendTest()}>{testing ? 'Sending…' : 'Test phone alert'}</button>}
+    </details>
+    <details><summary>Advanced research</summary>
       <div className="radar-details">
         <p className="muted small">{snapshot?.runCount ?? 0} saved runs. Research is stored on this Mac. No trades are placed.</p>
         {(snapshot?.issues ?? []).map(issue => <p className="muted small" key={issue}>{issue}</p>)}
