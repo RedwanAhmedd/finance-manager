@@ -7,3 +7,6 @@ dist
 
 # Private research, portfolio evidence and prospective Radar history
 .radar/
+
+# Assistant eval answers (contain private figures)
+.eval/

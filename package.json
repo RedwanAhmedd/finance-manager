@@ -9,6 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.radar.json",
     "test": "vitest run",
+    "eval": "vitest run --config vitest.eval.config.ts",
     "radar": "node scripts/radar-v4.ts",
     "radar:check": "node test/radar-v4-check.ts && node test/radar-runner-check.ts",
     "check": "npm test && npm run radar:check && npm run typecheck"

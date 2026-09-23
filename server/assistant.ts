@@ -38,6 +38,20 @@ function sameOrigin(req: IncomingMessage): boolean {
   return !origin || origin === `http://${req.headers.host}`
 }
 
+// Radar decisions come from this server, not from an assistant guess or a
+// client-supplied claim that a research gate passed.
+export async function withRadar(context: string, radarSnapshot: () => Promise<RadarSnapshot>): Promise<string> {
+  let radar: unknown
+  try {
+    const snap = await radarSnapshot()
+    radar = { version: snap.version, asOf: snap.fetchedAt, coverage: snap.coverage, candidates: snap.candidates.map(c => c.decision), benchmark: snap.benchmark, issues: snap.issues }
+  } catch { radar = { action: 'WAIT', reason: 'Radar could not verify its records.' } }
+  return `${context}
+
+# Server-verified Strike Radar
+${JSON.stringify(radar)}`
+}
+
 // saveContextTo (development only) writes the latest document the model was given,
 // so its understanding can be tested against the source database.
 export function createAssistantHandler(provider: Provider, { saveContextTo, radarSnapshot }: { saveContextTo?: string; radarSnapshot?: () => Promise<RadarSnapshot> } = {}) {
@@ -66,16 +80,7 @@ export function createAssistantHandler(provider: Provider, { saveContextTo, rada
 
     let request: AssistantRequest
     try { request = parseRequest(await readBody(req)) } catch (error) { return json(400, { error: errorText(error) }) }
-    // Radar decisions come from this server, not from an assistant guess or a
-    // client-supplied claim that a research gate passed.
-    if (radarSnapshot) {
-      let radar: unknown
-      try {
-        const snap = await radarSnapshot()
-        radar = { version: snap.version, asOf: snap.fetchedAt, coverage: snap.coverage, candidates: snap.candidates.map(c => c.decision), benchmark: snap.benchmark, issues: snap.issues }
-      } catch { radar = { action: 'WAIT', reason: 'Radar could not verify its records.' } }
-      request = { ...request, context: request.context + '\n\n# Server-verified Strike Radar\n' + JSON.stringify(radar) }
-    }
+    if (radarSnapshot) request = { ...request, context: await withRadar(request.context, radarSnapshot) }
     if (saveContextTo) await writeFile(saveContextTo, request.context).catch(() => {})
     const setup = await provider.check()
     if (setup) return json(503, { error: setup })
