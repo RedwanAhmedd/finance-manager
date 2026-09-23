@@ -32,7 +32,7 @@ export const BRIEFING_REQUEST = `Write my briefing from the current snapshot. Us
 ### This month's spending
 ### Where things stand
 ### Needs attention
-One short bullet under each. Put the most important point first in each section. If no personal spending is recorded yet, say so in one bullet under the first heading. Under 100 words in total. Mention Radar only for a verified action or a material coverage issue.`
+One short bullet under each. Put the most important point first in each section. If no personal spending is recorded yet, say so in one bullet under the first heading. Under 100 words in total. Under Needs attention, list only something the owner can act on. Mention Radar only for a verified action or when its portfolio source is stale; never mention its lack of live market, news or alert feeds.`
 
 // Small models follow a rule stated beside the question far better than one
 // stated pages earlier. A question about trading a specific holding gets the

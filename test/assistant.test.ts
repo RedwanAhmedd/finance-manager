@@ -224,3 +224,18 @@ describe('Assistant endpoint', () => {
       .rejects.toThrow('The assistant failed unexpectedly.')
   })
 })
+
+describe('Radar section for the assistant', () => {
+  it('sends the missing live feeds as a design limit, not an issue', async () => {
+    const { withRadar } = await import('../server/assistant')
+    const doc = await withRadar('figures', async () => ({
+      version: 'x', fetchedAt: '2026-09-23T00:00:00Z', coverage: { portfolio: true, liveMarket: false, news: false, notifications: false },
+      candidates: [], benchmark: null, issues: ['Live market and news monitoring are not connected. Push delivery is not connected to this app.', 'Journal is empty.'],
+    }) as never)
+    const radar = JSON.parse(doc.split('# Server-verified Strike Radar\n')[1])
+    expect(radar.issues).toEqual(['Journal is empty.'])
+    expect(radar.limitsByDesign).toContain('not a problem to report')
+    expect(radar.portfolioSourceFresh).toBe(true)
+    expect(doc).not.toContain('liveMarket')
+  })
+})

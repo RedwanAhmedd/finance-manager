@@ -40,11 +40,20 @@ function sameOrigin(req: IncomingMessage): boolean {
 
 // Radar decisions come from this server, not from an assistant guess or a
 // client-supplied claim that a research gate passed.
+const RADAR_DESIGN_LIMIT = /live market|news monitoring|push delivery/i
+
 export async function withRadar(context: string, radarSnapshot: () => Promise<RadarSnapshot>): Promise<string> {
   let radar: unknown
   try {
     const snap = await radarSnapshot()
-    radar = { version: snap.version, asOf: snap.fetchedAt, coverage: snap.coverage, candidates: snap.candidates.map(c => c.decision), benchmark: snap.benchmark, issues: snap.issues }
+    // Radar has no live market, news or alert feed by design. Sent as an issue, a
+    // small model reports it as a problem in every briefing; it is a fixed limit.
+    radar = {
+      version: snap.version, asOf: snap.fetchedAt, portfolioSourceFresh: snap.coverage.portfolio,
+      candidates: snap.candidates.map(c => c.decision), benchmark: snap.benchmark,
+      issues: snap.issues.filter(i => !RADAR_DESIGN_LIMIT.test(i)),
+      limitsByDesign: `Radar checks saved research against the portfolio. It has no live market or news feed${snap.coverage.notifications ? '; owned-position alerts to the owner\'s phone use daily closes' : ' and no alert delivery'}. That is how it is built, not a problem to report.`,
+    }
   } catch { radar = { action: 'WAIT', reason: 'Radar could not verify its records.' } }
   return `${context}
 

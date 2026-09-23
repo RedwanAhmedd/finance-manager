@@ -178,7 +178,7 @@ export default function LiveDashboard() {
     </section>
 
     <RadarPanel />
-    <AssistantPanel rent={rent} stock={stock} fx={fx} money={money} reading={reading} />
+    <AssistantPanel rent={rent} stock={stock} fx={fx} money={money} personal={personal} reading={reading} />
 
     <section className="two-col">
       <Portfolio stock={stock} loading={!stock && s.loading} />

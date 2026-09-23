@@ -5,18 +5,14 @@ import { endNote, streamAssistant, type Turn } from './stream'
 import { RichText } from './RichText'
 import type { FxReference } from '../books/overview'
 import type { MoneyState } from '../money/EverydayMoney'
+import type { PersonalBooks } from '../books/personal'
+import { suggestedQuestions } from './suggestions'
 
 type Status = { provider: 'anthropic' | 'ollama'; model: string; local: boolean; ready: boolean; setup: string | null } | 'checking' | 'unavailable'
 type Briefing = { text: string; state: 'idle' | 'writing' | 'done' | 'error'; note: string | null }
 
-const SUGGESTIONS = [
-  'Where did my money go last month?',
-  'Which subscriptions am I paying for?',
-  'Can I afford C$300 this month?',
-  'How is the rental business doing this month?',
-]
 
-export default function AssistantPanel({ rent, stock, fx, money, reading }: { rent: RentSnapshot | null; stock: StockSnapshot | null; fx: FxReference | null; money: MoneyState; reading: boolean }) {
+export default function AssistantPanel({ rent, stock, fx, money, personal, reading }: { rent: RentSnapshot | null; stock: StockSnapshot | null; fx: FxReference | null; money: MoneyState; personal: PersonalBooks | null; reading: boolean }) {
   const [status, setStatus] = useState<Status>('checking')
   const [briefing, setBriefing] = useState<Briefing>({ text: '', state: 'idle', note: null })
   const [turns, setTurns] = useState<Turn[]>([])
@@ -28,6 +24,9 @@ export default function AssistantPanel({ rent, stock, fx, money, reading }: { re
 
   const context = useMemo(() => rent || stock || money ? assistantContext(rent, stock, fx, money) : null, [rent, stock, fx, money])
   const ready = typeof status === 'object' && status.ready
+  const asked = new Set(turns.filter(t => t.role === 'user').map(t => t.content))
+  const suggestions = useMemo(() => suggestedQuestions(rent, stock, personal, 8), [rent, stock, personal])
+    .filter(q => !asked.has(q)).slice(0, turns.length ? 3 : 4)
 
   const checkStatus = () => { fetch('/api/assistant/status').then(r => r.ok ? r.json() : Promise.reject()).then(setStatus).catch(() => setStatus('unavailable')) }
   useEffect(checkStatus, [])
@@ -99,7 +98,7 @@ export default function AssistantPanel({ rent, stock, fx, money, reading }: { re
             {turns.map((turn, i) => <div key={i} className={`chat-turn chat-${turn.role}`}>
               {turn.role === 'user' ? <p>{turn.content}</p> : turn.content ? <RichText text={turn.content} /> : <p className="muted">Thinking…</p>}
             </div>)}
-            {!turns.length && <div className="suggestions">{SUGGESTIONS.map(s => <button key={s} onClick={() => void ask(s)} disabled={chatBusy}>{s}</button>)}</div>}
+            {!chatBusy && suggestions.length > 0 && <div className="suggestions" aria-label={turns.length ? 'Follow-up questions' : 'Suggested questions'}>{suggestions.map(q => <button key={q} onClick={() => void ask(q)}>{q}</button>)}</div>}
             {chatError && <p role="alert" className="error small">{chatError}</p>}
             <form className="chat-form" onSubmit={submit}>
               <input aria-label="Ask the assistant" placeholder="Ask about your money…" value={draft} onChange={e => setDraft(e.target.value)} maxLength={8000} disabled={chatBusy} />
