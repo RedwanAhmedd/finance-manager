@@ -35,7 +35,7 @@ function localServer(env: Record<string, string>): Plugin {
   const install = (server: { middlewares: Connect.Server }) => { for (const handler of handlers) server.middlewares.use((req, res, next) => void handler(req, res, next)) }
   // Phone alerts run only in the always-on service (vite preview), never in the
   // dev server or under tests, so one process owns delivery.
-  const startAlerts = () => { if (env.NTFY_TOPIC && !process.env.VITEST) scheduleRadarAlerts(alerts, line => console.log(`${new Date().toISOString()} ${line}`)) }
+  const startAlerts = () => { if (env.NTFY_TOPIC && !process.env.VITEST) scheduleRadarAlerts(alerts, line => console.log(`${new Date().toISOString()} ${line}`), 3_600_000, radar.snapshot) }
   return { name: 'finance-manager-local-server', configureServer: install, configurePreviewServer: server => { install(server); startAlerts() } }
 }
 
