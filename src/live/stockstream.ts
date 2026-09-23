@@ -102,6 +102,8 @@ export class ReadOnlyStockStreamAdapter {
     ])
     const raw = {positions,trades,quotes,symbols,settings,fx}
     const snapshot = normalizeStock(raw, now)
-    return { ...snapshot, books: buildStockBooks({ ...raw, watchlist }, snapshot, now) }
+    const wanted = new Set([...watchlist.map(w => w.symbol), ...snapshot.holdings.filter(h => h.shares > 0 && h.role !== 'cash').map(h => h.symbol)])
+    const researchInstruments = symbols.filter(s => wanted.has(s.symbol)).map(s => ({ symbol: s.symbol, underlyingSymbol: s.underlying_symbol, displayName: s.display_name ?? null }))
+    return { ...snapshot, books: buildStockBooks({ ...raw, watchlist }, snapshot, now), researchInstruments }
   }
 }
