@@ -56,6 +56,30 @@ Other income items: ${b.otherIncome.map(o => `${label(o.month)}: ${o.items.join(
 
   const ranked = (title: string, rows: [string, number][], fmt: (n: number) => string = bdt) =>
     `${title}: ${[...rows].sort((x, y) => y[1] - x[1]).map(([name, v], i) => `${i + 1}. ${name} ${fmt(v)}`).join('; ')}.`
+
+  // Small models cannot reliably find the highest or lowest row of a long table,
+  // and fill in months that have no records. Extremes are computed here instead.
+  const extremes = (rows: [string, number][]) => {
+    const values = rows.map(r => r[1])
+    const max = Math.max(...values), min = Math.min(...values)
+    const at = (v: number) => rows.filter(r => r[1] === v).map(r => r[0]).join(' and ')
+    return max === min ? `the same in every month, ${bdt(max)}` : `highest ${at(max)} ${bdt(max)}; lowest ${at(min)} ${bdt(min)}`
+  }
+  const byMonth = (value: (m: typeof done[number]) => number): [string, number][] => done.map(m => [label(m.month), value(m)])
+  const results = b.operatingResult.filter(r => r.complete)
+  const costMonths = b.expenses.filter(e => e.complete)
+  const categoryTotals = Object.entries(costMonths.reduce<Record<string, number>>((t, e) => { for (const [k, v] of Object.entries(e.byCategory)) t[k] = (t[k] ?? 0) + v; return t }, {}))
+  const costSpan = `${costMonths.length} complete month${costMonths.length === 1 ? '' : 's'}: ${costMonths.map(e => label(e.month)).join(', ')}`
+  sections.push(`### Months ranked
+Only months that appear in these books have records. Never fill in, repeat or estimate a month that is not listed.
+${done.length ? `Completed collection months, ${label(done[0].month)} to ${label(done[done.length - 1].month)} (${done.length} months; the month in progress is left out; each is labelled by collection month):
+- Total billed: ${extremes(byMonth(m => m.rentBilled + m.utilitiesBilled))}.
+- Rent billed: ${extremes(byMonth(m => m.rentBilled))}.
+- Utilities billed to tenants: ${extremes(byMonth(m => m.utilitiesBilled))}.
+- Collected: ${extremes(byMonth(m => m.collected))}.` : 'No completed collection month yet.'}
+Operating surplus (profit after expenses): ${results.length >= 2 ? `${extremes(results.map(r => [label(r.month), r.surplus]))} (complete months only).` : results.length === 1 ? `only one complete month has expense records (${label(results[0].month)}, surplus ${bdt(results[0].surplus)}), so months cannot be ranked by surplus or profit yet. Expenses are recorded since ${b.expensesRecordedSince}.` : 'no complete month has expense records yet, so months cannot be ranked by surplus or profit.'}
+${categoryTotals.length ? `${ranked(`Expenses by category, total over ${costSpan}`, categoryTotals)} The largest expense is the first of these. Utilities billed to tenants are recovered from them, so they are not an expense of the business.${costMonths.length < 2 ? ' With only one complete month, whether an expense recurs cannot be confirmed yet.' : ''}` : 'Expenses by category: no complete month of expense records yet.'}`)
+
   sections.push(`### Buildings ranked (largest first)
 ${ranked('By tenant deposits held', b.properties.map(p => [p.name, p.refundableDeposits]))}
 ${ranked('By monthly rent roll', b.properties.map(p => [p.name, p.monthlyRentRoll]))}

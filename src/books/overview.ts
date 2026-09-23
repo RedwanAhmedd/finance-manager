@@ -19,6 +19,8 @@ export interface Overview {
     latestMonthlySurplus: { month: string; amount: number } | null
   } | null
   canada: { portfolio: number | null; cash: number | null; averageMonthlyInvested: number | null } | null
+  // Cash in the owner's Canadian bank accounts (RentStream treasury), not brokerage cash.
+  canadianBankCash: number | null
   personal: { latestCompleteMonth: { month: string; spending: number } | null; averageSpending: { months: number; amount: number } | null; draws12Months: number; monthsOfSpendingInBangladeshCash: number | null } | null
   // Everything the owner counts as his: Bangladesh business cash after card debt,
   // recorded Canadian account balances and the investment portfolio.
@@ -55,7 +57,7 @@ export function buildOverview(rent: RentSnapshot | null, stock: StockSnapshot | 
       ? Math.round(bangladesh.strategicDeployable / rate.rate / averageSpending.amount * 10) / 10 : null,
   } : null
   return {
-    rate, bangladesh, canada, personal,
+    rate, bangladesh, canada, personal, canadianBankCash: rent?.treasuryCashCad ?? null,
     ownersTotalCad: bdAvailable === null ? null : Math.round((bdAvailable + (personalBooks?.balances.reduce((s, b) => s + b.balance, 0) ?? 0) + (canada?.portfolio ?? 0)) * 100) / 100,
     canadaInvestingShareOfBangladeshSurplus: surplus && surplus > 0 && canada?.averageMonthlyInvested != null ? Math.round(canada.averageMonthlyInvested * rate.rate / surplus * 1000) / 10 : null,
   }
@@ -77,8 +79,9 @@ Reference rate: 1 CAD = ৳${r.toFixed(2)} (1 BDT = C$${(1 / r).toFixed(5)}), da
 - Safe to invest (strategic deployable cash; the page's "Safe to invest"): ${both(b.strategicDeployable, r)}. This is what remains after card debt, a three-month operating reserve (${both(b.operatingReserveTarget, r)}) and excluding family-restricted and unclassified accounts. When the owner asks what is safe or free to invest, use this figure, not cash after card debt.
 - Latest complete month's operating surplus: ${b.latestMonthlySurplus ? `${both(b.latestMonthlySurplus.amount, r)} (${b.latestMonthlySurplus.month}, the only complete month so far)` : 'unknown'}.`)
   else lines.push('Bangladesh: RentStream not read.')
+  lines.push(`Canada (bank cash): cash in the owner's Canadian bank accounts, recorded in RentStream: ${cad(o.canadianBankCash)}. This is the owner's cash in Canada; brokerage cash is separate and sits inside the portfolio.`)
   if (c) lines.push(`Canada (investments):
-- Portfolio ${cad(c.portfolio)} (≈ ${bdt(c.portfolio === null ? null : c.portfolio * r)}), of which brokerage cash ${cad(c.cash)}.
+- Portfolio ${cad(c.portfolio)} (≈ ${bdt(c.portfolio === null ? null : c.portfolio * r)}), of which brokerage cash (inside the portfolio, not bank cash) ${cad(c.cash)}.
 - Actually invested on average ${cad(c.averageMonthlyInvested)} a month (≈ ${bdt(c.averageMonthlyInvested === null ? null : c.averageMonthlyInvested * r)}) over the short history.`)
   else lines.push('Canada: StockStream not read.')
   const p = o.personal
