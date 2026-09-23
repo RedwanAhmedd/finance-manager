@@ -11,7 +11,8 @@ export interface RadarSnapshot {
   runCount: number
   candidates: { savedAt: string; decision: EliteEvaluation; evaluation: RadarEvaluation; entryPriceCad: number | null; priceSide: 'bid' | 'ask'; priceEvidence: { asOf: string; sourceUrl: string }[] }[]
   owned: { symbol: string; shares: number; priceDate: string | null }[]
-  coverage: { portfolio: boolean; liveMarket: false; news: false; notifications: false }
+  coverage: { portfolio: boolean; liveMarket: false; news: false; notifications: boolean }
+  alerts?: { configured: boolean; failing: boolean; recent: { title: string; createdAt: string; delivery: 'pending' | 'delivered' | 'failed' }[] }
   issues: string[]
   benchmark: BenchmarkLabResult | null
 }

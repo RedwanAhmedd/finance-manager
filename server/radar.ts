@@ -41,7 +41,8 @@ async function readBody(req: IncomingMessage) {
   for await (const chunk of req) { size += chunk.length; if (size > 1_000_000) throw new Error('Radar import exceeds 1 MB'); chunks.push(chunk) }
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>
 }
-export function createRadarService(directory: string, getStock: () => Promise<StockSnapshot | null>) {
+type AlertStatus = NonNullable<RadarSnapshot['alerts']>
+export function createRadarService(directory: string, getStock: () => Promise<StockSnapshot | null>, alerts?: { status(): AlertStatus; sendTest(): Promise<void> }) {
   const root = resolve(directory), journal = resolve(root, 'journal.json')
   const receipts = resolve(root, 'receipts')
   async function source() { try { return await getStock() } catch { return null } }
@@ -61,7 +62,12 @@ export function createRadarService(directory: string, getStock: () => Promise<St
       return { savedAt: run.savedAt, decision, evaluation, entryPriceCad: run.input.execution[priceSide], priceSide, priceEvidence: run.input.execution.evidence }
     })
     // No price/news provider is silently inferred from daily portfolio marks.
-    issues.push('Live market and news monitoring are not connected. Push delivery is not connected to this app.')
+    let alertStatus: AlertStatus | undefined
+    try { alertStatus = alerts?.status() } catch { issues.push('Radar alert store could not be verified; phone alerts are paused.') }
+    issues.push(alertStatus?.configured
+      ? 'Live market and news monitoring are not connected. Owned-position phone alerts use StockStream daily closes.'
+      : 'Live market and news monitoring are not connected. Push delivery is not connected to this app.')
+    if (alertStatus?.failing) issues.push('A phone alert could not be delivered; it will be retried.')
     let benchmark: RadarSnapshot['benchmark'] = benchmarkFromStock(stock, now)
     const benchmarkInput = readJson(resolve(root, 'benchmark.json'))
     if (benchmarkInput) benchmark = buildBenchmarkLab({ ...(benchmarkInput as BenchmarkLabInput), evaluatedAt: now })
@@ -69,7 +75,7 @@ export function createRadarService(directory: string, getStock: () => Promise<St
       version: '5.2', fetchedAt: now, status: !sourceFresh ? 'degraded' : state ? 'ready' : 'empty', action: 'WAIT',
       reason: candidates.length ? 'Review the latest entries below.' : 'No reviewed entry yet.', journalExists: state !== null, runCount: state?.runs.length ?? 0, candidates,
       owned: sourceFresh ? stock!.holdings.filter(h => h.role !== 'cash' && h.role !== 'watchlist' && h.shares > 0).map(h => ({ symbol: h.symbol, shares: h.shares, priceDate: h.asOf })) : [],
-      coverage: { portfolio: sourceFresh, liveMarket: false, news: false, notifications: false }, issues, benchmark,
+      coverage: { portfolio: sourceFresh, liveMarket: false, news: false, notifications: !!alertStatus?.configured && !alertStatus.failing }, alerts: alertStatus, issues, benchmark,
     }
   }
   async function save(body: Record<string, unknown>) {
@@ -90,16 +96,24 @@ export function createRadarService(directory: string, getStock: () => Promise<St
     } catch { throw new RadarCommitError(run.id) }
     return { runId: summary.runId, decision, persisted: true, readbackVerified: true, notificationDelivery: 'NOT CONNECTED' }
   }
-  return { snapshot, save }
+  async function sendTestAlert() {
+    if (!alerts) throw new Error('Phone alerts are not set up. Add NTFY_TOPIC to .env.local and restart.')
+    await alerts.sendTest()
+  }
+  return { snapshot, save, sendTestAlert }
 }
 export function createRadarHandler(service: ReturnType<typeof createRadarService>) {
   return async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
     const path = req.url?.split('?')[0]
-    if (path !== '/api/radar') return next()
+    if (path !== '/api/radar' && path !== '/api/radar/test-alert') return next()
     const json = (status: number, body: unknown) => { res.statusCode = status; res.setHeader('content-type', 'application/json'); res.setHeader('cache-control', 'no-store'); res.end(JSON.stringify(body)) }
     // Local private research; reject DNS rebinding as well as foreign origins.
     const host = req.headers.host ?? ''
     if (!/^(127\.0\.0\.1|localhost)(:\d+)?$/.test(host) || (req.headers.origin && req.headers.origin !== `http://${host}`)) return json(403, { error: 'Local same-origin requests only' })
+    if (path === '/api/radar/test-alert') {
+      if (req.method !== 'POST') return json(405, { error: 'POST only' })
+      try { await service.sendTestAlert(); return json(200, { sent: true }) } catch (e) { return json(502, { error: e instanceof Error ? e.message : 'Test alert failed' }) }
+    }
     if (req.method === 'GET') {
       try { return json(200, await service.snapshot()) } catch { return json(503, { error: 'Radar records could not be verified. WAIT; inspect the journal.' }) }
     }

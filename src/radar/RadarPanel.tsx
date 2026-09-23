@@ -19,6 +19,17 @@ export default function RadarPanel() {
   const [symbol, setSymbol] = useState('')
   const [underlying, setUnderlying] = useState('')
   const request = useRef(0), importRequest = useRef(0)
+  const [testing, setTesting] = useState(false)
+  async function sendTest() {
+    setTesting(true); setError(''); setMessage('')
+    try {
+      const response = await fetch('/api/radar/test-alert', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
+      const body = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(body.error || 'Test alert failed')
+      setMessage('Test alert sent. Check your phone.')
+    } catch (e) { setError(e instanceof Error ? e.message : 'Test alert failed') }
+    finally { setTesting(false) }
+  }
   const refresh = useCallback(async () => {
     const token = ++request.current
     setLoading(true); setError(''); setSnapshot(null)
@@ -72,7 +83,8 @@ export default function RadarPanel() {
       {c.entryPriceCad != null && <p className="muted">{c.priceSide === 'bid' ? 'Bid' : 'Ask'}: {money(c.entryPriceCad)}{c.priceEvidence.map((e, i) => <span key={`${e.sourceUrl}-${i}`}> · <a href={e.sourceUrl} target="_blank" rel="noreferrer">{new Date(e.asOf).toLocaleString()}</a></span>)}</p>}
     </article>)}
     <div className="radar-facts"><span>Capital: confirm before sizing</span><span>XEQT: {benchmark?.status === 'EXACT' ? `${money(benchmark.alphaCad!)} relative result (${benchmark.periodStart?.slice(0, 10)}–${benchmark.asOf?.slice(0, 10)})` : benchmark?.status === 'ESTIMATE' ? 'estimate only' : 'comparison pending'}</span></div>
-    <p className="muted small">{snapshot?.owned.length ?? '—'} owned positions · Live alerts not connected</p>
+    <p className="muted small">{snapshot?.owned.length ?? '—'} owned positions · {snapshot?.alerts?.configured ? `Phone alerts on${snapshot.alerts.failing ? ' (a delivery failed; retrying)' : ''}` : 'Phone alerts off'}{snapshot?.alerts?.recent[0] ? ` · Last: ${snapshot.alerts.recent[0].title}, ${new Date(snapshot.alerts.recent[0].createdAt).toLocaleDateString()}` : ''}</p>
+    {snapshot?.alerts?.configured && <button className="link-button" disabled={testing} onClick={() => void sendTest()}>{testing ? 'Sending…' : 'Send test alert to my phone'}</button>}
     <details><summary>Research &amp; checks</summary>
       <div className="radar-details">
         <p className="muted small">{snapshot?.runCount ?? 0} saved runs. Research is stored on this Mac. No trades are placed.</p>

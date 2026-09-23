@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { number, isStale, type Holding, type StockSnapshot } from './models'
+import { number, isStale, type DailyClose, type Holding, type StockSnapshot } from './models'
 import { readAll } from './read'
 import { buildStockBooks, type StockDetail } from '../books/stock'
 
@@ -63,6 +63,12 @@ export function normalizeStock(raw: StockRaw, now = new Date()): StockSnapshot {
     if (shares > 0 && currency === 'USD' && (!usdCad || isStale(usdCad.rate_date, now))) issues.push(`${pos.symbol}: USD/CAD rate needs verification.`)
     return { symbol: pos.symbol, role: pos.role, shares, valueCad, priceSource, asOf }
   })
+  const closes: DailyClose[] = raw.positions.filter(p => p.role !== 'cash').flatMap(pos => {
+    const own = raw.quotes.filter(q => q.symbol === pos.symbol && q.trade_date <= today).sort((a, b) => b.trade_date.localeCompare(a.trade_date))
+    if (!own.length) return []
+    return [{ symbol: pos.symbol, currency: metadata.get(pos.symbol)?.currency ?? null, date: own[0].trade_date, close: number(own[0].close),
+      previousDate: own[1]?.trade_date ?? null, previousClose: own[1] ? number(own[1].close) : null }]
+  })
   const sum = (rows: Holding[]) => rows.some(r => r.valueCad === null) ? null : rows.reduce((s,r) => s + r.valueCad!,0)
   const cashRows = holdings.filter(h => h.role === 'cash')
   const cashCad = cashRows.length ? sum(cashRows) : null
@@ -77,7 +83,7 @@ export function normalizeStock(raw: StockRaw, now = new Date()): StockSnapshot {
     cashAsOf: cashRows.map(h => h.asOf).sort()[0] ?? null,
     corePct: portfolioCad !== null && portfolioCad > 0 && core !== null ? core / portfolioCad * 100 : null,
     contributedYtdCad: settings?.base_currency === 'CAD' && settings.contributed_ytd !== null ? number(settings.contributed_ytd) : null,
-    issues,
+    issues, closes,
   }
 }
 
