@@ -47,3 +47,18 @@ export async function withTmxCloses(stock: StockSnapshot | null, now = new Date(
   const failed = wanted.filter((_, i) => results[i].status === 'rejected')
   return { stock: { ...stock, closes: [...(stock.closes ?? []).filter(c => !added.some(a => a.symbol === c.symbol)), ...added] }, failed }
 }
+
+
+/** Daily-close discovery for exact Canadian CDRs on the StockStream watchlist.
+ * This is a research trigger, never a BUY signal. It deliberately refuses to
+ * infer fundamentals, catalysts, or an ELITE pass from price movement alone.
+ */
+export async function tmxWatchlistMoves(symbols: readonly string[], now = new Date(), transport: typeof fetch = fetch) {
+  const exact = [...new Set(symbols.filter(s => tmxSymbol(s)))]
+  const settled = await Promise.allSettled(exact.map(s => tmxDailyClose(s, now, transport)))
+  return settled.flatMap((r, i) => {
+    if (r.status !== 'fulfilled' || r.value.previousClose == null || !(r.value.previousClose > 0)) return []
+    const movePct = (r.value.close - r.value.previousClose) / r.value.previousClose * 100
+    return [{ symbol: exact[i], close: r.value.close, date: r.value.date, previousClose: r.value.previousClose, previousDate: r.value.previousDate!, movePct }]
+  })
+}
