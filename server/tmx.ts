@@ -62,3 +62,28 @@ export async function tmxWatchlistMoves(symbols: readonly string[], now = new Da
     return [{ symbol: exact[i], close: r.value.close, date: r.value.date, previousClose: r.value.previousClose, previousDate: r.value.previousDate!, movePct }]
   })
 }
+
+
+/** Exact Canadian SPCX CDR watch; reject an unexpected listing or issuer. */
+export async function spcxDailyClose(now = new Date(), transport: typeof fetch = fetch): Promise<DailyClose> {
+  const start = new Date(now.getTime() - 14 * 86_400_000).toISOString().slice(0, 10)
+  for (const listing of ['SPCX:TSX', 'SPCX']) {
+    try {
+      const res = await transport(ENDPOINT, {
+        method: 'POST', signal: AbortSignal.timeout(15_000),
+        headers: { 'content-type': 'application/json', origin: 'https://money.tmx.com', referer: 'https://money.tmx.com/' },
+        body: JSON.stringify({ query: QUERY, variables: { symbol: listing, start, end: now.toISOString().slice(0, 10) } }),
+      })
+      if (!res.ok) continue
+      const body = await res.json() as { data?: { getQuoteBySymbol?: { symbol?: string; name?: string } | null; getCompanyPriceHistory?: { datetime?: string; closePrice?: number; volume?: number }[] | null } }
+      const quote = body.data?.getQuoteBySymbol
+      if (quote?.symbol !== listing || !/SpaceX/i.test(quote.name ?? '') || !/CDR/i.test(quote.name ?? '')) continue
+      const days = (body.data?.getCompanyPriceHistory ?? [])
+        .filter(d => typeof d.datetime === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.datetime) && typeof d.closePrice === 'number' && d.closePrice > 0 && typeof d.volume === 'number' && d.volume > 0 && d.datetime <= now.toISOString().slice(0, 10))
+        .sort((a, b) => b.datetime!.localeCompare(a.datetime!))
+      if (days.length < 2) continue
+      return { symbol: 'SPCX', currency: 'CAD', date: days[0].datetime!, close: days[0].closePrice!, previousDate: days[1].datetime!, previousClose: days[1].closePrice!, source: 'TMX Money' }
+    } catch { /* Try alternate exact listing, never substitute an underlying. */ }
+  }
+  throw new Error('No verified traded SPCX SpaceX CDR close from TMX')
+}
