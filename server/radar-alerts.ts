@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 import { ownedPositionAlerts, RANK, type AlertCandidate, type Severity } from '../src/radar/alerts.ts'
 import type { StockSnapshot } from '../src/live/models.ts'
 import type { RadarSnapshot } from '../src/radar/types.ts'
-import { tmxWatchlistMoves } from './tmx.ts'
+import { tmxWatchlistMoves, spcxDailyClose } from './tmx.ts'
 import type { ResearchProvider } from './radar-research.ts'
 
 // Radar's alert delivery: each alert episode is persisted and read back before
@@ -162,6 +162,27 @@ export function createRadarAlerts({ directory, getStock, send, now = () => new D
     }
   }
 
+  async function checkSpcxEntry() {
+    if (!send) return { created: 0 }
+    // A price zone triggers an entry REVIEW, never an automatic BUY.
+    const close = await spcxDailyClose(now()).catch(() => null)
+    if (!close || (now().getTime() - Date.parse(close.date + 'T00:00:00Z')) > 4 * 86_400_000) return { created: 0 }
+    const zone = close.close >= 23.80 && close.close <= 24.30 ? 'dip'
+      : close.close > 25.80 ? 'breakout' : null
+    if (!zone) return { created: 0 }
+    const id = `spcx|review|${zone}|${close.date}`
+    if (read().episodes.some(e => e.id === id)) return { created: 0 }
+    const stamp = now().toISOString()
+    const alert: AlertCandidate = {
+      id, kind: 'discovery', symbol: 'SPCX', date: close.date, severity: 'RESEARCH CANDIDATE', movePct: null,
+      title: `🔎 SPCX · ${zone} entry review`,
+      body: `SPCX exact Canadian CDR closed C${close.close.toFixed(2)} on ${close.date} (TMX). ${zone === 'dip' ? 'C$23.80–24.30 dip zone' : 'Above C$25.80 breakout zone'} reached. Review volume, spread, valuation, XEQT hurdle and settled cash. WAIT until verified; no trade placed.`,
+    }
+    const episodes = update(list => [...list, { ...alert, createdAt: stamp, updatedAt: stamp, delivery: { status: 'pending', attempts: 0, lastAttemptAt: null, error: null } }].slice(-2000))
+    await deliver(episodes)
+    return { created: 1 }
+  }
+
   async function discoverWatchlist() {
     if (!send) return { created: 0 }
     const stock = await getStock().catch(() => null)
@@ -228,14 +249,14 @@ export function createRadarAlerts({ directory, getStock, send, now = () => new D
     await send({ title: 'Radar test · connection only', body: 'Finance Manager reached this phone. This is a manual delivery test, not a market signal. Live alerts will name the instrument, the observed change and the reason to review.', priority: 2, tags: ['white_check_mark'] })
   }
 
-  return { check, status, sendTest, notifyOpportunities, discoverWatchlist, discoverLiveResearch }
+  return { check, status, sendTest, notifyOpportunities, discoverWatchlist, discoverLiveResearch, checkSpcxEntry }
 }
 
 // Runs a scan shortly after start and then hourly. Daily closes change once a
 // day, and a replayed scan never resends an episode.
 export function scheduleRadarAlerts(alerts: ReturnType<typeof createRadarAlerts>, log: (line: string) => void, everyMs = 3_600_000, getRadar?: () => Promise<RadarSnapshot>, research?: ResearchProvider) {
   const run = () => alerts.check()
-    .then(async r => { if (r.created || r.escalated || !r.sourceRead) log(`Radar alerts: ${r.created} new, ${r.escalated} escalated${r.sourceRead ? '' : ', portfolio unreadable'}`); if (getRadar) { const d = await alerts.discoverWatchlist(); if (d.created) log(`Radar discovery: ${d.created} research candidate(s)`); if (research?.configured) { const live = await alerts.discoverLiveResearch(research); if (live.created) log(`Radar live research: ${live.created} candidate(s)`) }; const o = await alerts.notifyOpportunities(getRadar); if (o.created) log(`Radar opportunities: ${o.created} new BUY alert(s)`) } })
+    .then(async r => { if (r.created || r.escalated || !r.sourceRead) log(`Radar alerts: ${r.created} new, ${r.escalated} escalated${r.sourceRead ? '' : ', portfolio unreadable'}`); if (getRadar) { const spcx = await alerts.checkSpcxEntry(); if (spcx.created) log('Radar SPCX: entry review triggered'); const d = await alerts.discoverWatchlist(); if (d.created) log(`Radar discovery: ${d.created} research candidate(s)`); if (research?.configured) { const live = await alerts.discoverLiveResearch(research); if (live.created) log(`Radar live research: ${live.created} candidate(s)`) }; const o = await alerts.notifyOpportunities(getRadar); if (o.created) log(`Radar opportunities: ${o.created} new BUY alert(s)`) } })
     .catch(e => log(`Radar alerts failed: ${e instanceof Error ? e.message : e}`))
   const first = setTimeout(run, 30_000)
   const timer = setInterval(run, everyMs)
