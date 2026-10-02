@@ -110,7 +110,7 @@ export function createRadarService(directory: string, getStock: () => Promise<St
       writeNew(resolve(receipts, `${run.hash}.json`), { ...record, digest: digest(record) })
       receiptFor(resolve(receipts, `${run.hash}.json`), run)
     } catch { throw new RadarCommitError(run.id) }
-    return { runId: summary.runId, decision, persisted: true, readbackVerified: true, notificationDelivery: 'NOT CONNECTED' }
+    return { runId: summary.runId, decision, prediction, persisted: true, readbackVerified: true, notificationDelivery: 'NOT CONNECTED' }
   }
   async function sendTestAlert() {
     if (!alerts) throw new Error('Phone alerts are not set up. Add NTFY_TOPIC to .env.local and restart.')
