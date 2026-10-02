@@ -121,4 +121,6 @@ definitions/evidence remain unknown. The assistant explains the server's Radar
 verdict; it does not invent one. See [the operating contract](docs/strike-radar-elite.md)
 for evidence requirements, private files and compatibility CLI usage.
 
+The cloud Radar also has a predictive overlay with calibrated confidence bands, an 80% minimum for **STRIKE CANDIDATE**, a 90% minimum for **ELITE STRIKE**, forecast scorekeeping, and no cash/ammo gate for opportunity quality. See [Strike Radar Predictive v3.6](docs/strike-radar-predictive-v3.6.md). Execution and sizing always remain the user's decision.
+
 Run `npm run check` for all app and migrated Radar checks, then `npm run build`.
