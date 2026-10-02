@@ -115,12 +115,15 @@ and `NTFY_TOKEN`, then restart `npm run serve` to use these server-side settings
 The phone must subscribe to the same topic. The alert state is kept in the
 private `.radar/alerts.json` file; retain it across restarts to keep deduplication.
 
-Intraday quote/news scanning and automated BUY/SELL recommendations are not
-connected. Existing cloud task settings are unchanged. Modules with missing
-definitions/evidence remain unknown. The assistant explains the server's Radar
-verdict; it does not invent one. See [the operating contract](docs/strike-radar-elite.md)
+The local app now implements the Predictive v3.6 state machine and persists frozen
+forecasts alongside ELITE receipts. A forecast can reach **STRIKE CANDIDATE** at
+80-89% or **ELITE STRIKE** at 90%+ without current cash being known; Canadian
+confirmation still gates short-horizon action when required. Autonomous forecast
+generation still depends on the cloud/live research layer and available market
+feeds. Modules with missing definitions/evidence remain unknown. The assistant
+explains verified Radar evidence and never auto-trades. See [the operating contract](docs/strike-radar-elite.md)
 for evidence requirements, private files and compatibility CLI usage.
 
-The cloud Radar also has a predictive overlay with calibrated confidence bands, an 80% minimum for **STRIKE CANDIDATE**, a 90% minimum for **ELITE STRIKE**, forecast scorekeeping, and no cash/ammo gate for opportunity quality. See [Strike Radar Predictive v3.6](docs/strike-radar-predictive-v3.6.md). Execution and sizing always remain the user's decision.
+The cloud task and local Finance Manager now share the Predictive v3.6 contract: calibrated confidence bands, an 80% minimum for **STRIKE CANDIDATE**, a 90% minimum for **ELITE STRIKE**, frozen forecasts plus calibration helpers, and no cash/ammo gate for opportunity quality. See [Strike Radar Predictive v3.6](docs/strike-radar-predictive-v3.6.md). Execution and sizing always remain the user's decision.
 
 Run `npm run check` for all app and migrated Radar checks, then `npm run build`.
