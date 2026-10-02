@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { emptyRadarInput, parseRadarInput, type RadarInput } from './engine'
 import { emptyEliteReview, parseEliteReview, type EliteReview } from './elite'
+import { emptyPredictiveForecast, parsePredictiveForecast, type PredictiveForecast } from './predictive'
 import type { RadarSnapshot } from './types'
 
 function download(name: string, value: unknown) {
@@ -13,7 +14,7 @@ export default function RadarPanel() {
   const [snapshot, setSnapshot] = useState<RadarSnapshot | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [draft, setDraft] = useState<{ input: RadarInput; review: EliteReview | null } | null>(null)
+  const [draft, setDraft] = useState<{ input: RadarInput; review: EliteReview | null; forecast: PredictiveForecast | null } | null>(null)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [symbol, setSymbol] = useState('')
@@ -57,7 +58,9 @@ export default function RadarPanel() {
       if (!input.ok) throw new Error(input.errors.slice(0, 3).join('; '))
       let review: EliteReview | null = null
       if (json?.review) { const parsed = parseEliteReview(json.review); if (!parsed.ok) throw new Error(parsed.errors.slice(0, 3).join('; ')); review = parsed.review }
-      setDraft({ input: input.input, review }); setMessage('Imported for review. Not saved yet.')
+      let forecast: PredictiveForecast | null = null
+      if (json?.forecast) { const parsed = parsePredictiveForecast(json.forecast); if (!parsed.ok) throw new Error(parsed.errors.slice(0, 3).join('; ')); forecast = parsed.forecast }
+      setDraft({ input: input.input, review, forecast }); setMessage('Imported for review. Not saved yet.')
     } catch (e) { if (token === importRequest.current) setError(e instanceof Error ? e.message : 'Invalid research file') }
   }
   async function save() {
@@ -72,15 +75,16 @@ export default function RadarPanel() {
     finally { setSaving(false) }
   }
   const candidates = error ? [] : snapshot?.candidates ?? []
-  const actionable = candidates.filter(c => c.decision.action !== 'WAIT')
+  const actionable = candidates.filter(c => c.decision.action !== 'WAIT' || c.prediction?.actionable)
   const benchmark = snapshot?.benchmark
   return <section className="panel radar" aria-label="Strike Radar">
-    <div className="panel-heading"><div><div className="eyebrow">Finance Manager · ELITE 5.2</div><h2>Strike Radar</h2></div><span className="status status-watch">{loading ? 'CHECKING' : actionable.length ? 'REVIEW' : 'WAIT'}</span></div>
+    <div className="panel-heading"><div><div className="eyebrow">Finance Manager · ELITE 5.2 + Predictive 3.6</div><h2>Strike Radar</h2></div><span className="status status-watch">{loading ? 'CHECKING' : actionable.some(c => c.prediction?.actionable) ? 'STRIKE' : actionable.length ? 'REVIEW' : 'WAIT'}</span></div>
     <p>{loading ? 'Checking…' : error ? 'Radar needs attention.' : actionable.length ? actionable.length === 1 ? 'One thing needs your review.' : `${actionable.length} things need your review.` : 'Nothing to do right now.'}</p>
     {!loading && !error && !actionable.length && <article className="strike-card"><strong>⚪ WAIT</strong><p>No verified opportunity beats doing nothing right now.</p></article>}
     {actionable.map(c => <article className="strike-card" key={c.decision.symbol}>
-      <strong>{c.decision.symbol} · {c.decision.action}{c.decision.amountCad != null ? ` · ${money(c.decision.amountCad)}` : ''}</strong>
-      <p>{c.decision.reason}</p>
+      <strong>{c.decision.symbol} · {c.prediction?.actionable ? `${c.prediction.state} · ${c.prediction.confidence}%` : c.decision.action}{!c.prediction?.actionable && c.decision.amountCad != null ? ` · ${money(c.decision.amountCad)}` : ''}</strong>
+      <p>{c.prediction?.actionable && c.forecast ? c.forecast.expectedPath : c.decision.reason}</p>
+      {c.prediction?.actionable && <p className="muted small">Bias: {c.prediction.direction} · Horizon: {c.prediction.horizon} · Execution and sizing are your decision.</p>}
       {c.entryPriceCad != null && <p className="muted">{c.priceSide === 'bid' ? 'Bid' : 'Ask'}: {money(c.entryPriceCad)}{c.priceEvidence.map((e, i) => <span key={`${e.sourceUrl}-${i}`}> · <a href={e.sourceUrl} target="_blank" rel="noreferrer">{new Date(e.asOf).toLocaleString()}</a></span>)}</p>}
     </article>)}
     <p className="muted small">{snapshot?.alerts?.configured ? `📱 Phone alerts ON${snapshot.alerts.failing ? ' · retrying a failed delivery' : ''}` : '📵 Phone alerts OFF'} · {snapshot?.owned.length ?? '—'} positions watched</p>
@@ -95,7 +99,7 @@ export default function RadarPanel() {
         {(snapshot?.issues ?? []).map(issue => <p className="muted small" key={issue}>{issue}</p>)}
         {benchmark && <p className="muted small">{benchmark.status}: {benchmark.reason}{benchmark.profitLossCad != null ? ` Current recorded P/L: ${money(benchmark.profitLossCad)}.` : ''}</p>}
         {candidates.map(c => <details className="strike-card" key={c.decision.symbol}><summary>{c.decision.symbol} · {c.decision.action}</summary>
-          <p className="small">Thesis: {c.decision.thesis} · Opportunity: {c.decision.opportunity} · Allocation: {c.decision.allocation}</p>
+          <p className="small">Thesis: {c.decision.thesis} · Opportunity: {c.decision.opportunity} · Allocation: {c.decision.allocation}{c.prediction ? ` · Predictive: ${c.prediction.state} ${c.prediction.confidence}%` : ''}</p>
           <ul className="small">{c.decision.blockers.map((b, i) => <li key={i}>{b}</li>)}</ul>
           <p className="muted small">Saved {new Date(c.savedAt).toLocaleString()}</p>
         </details>)}
@@ -103,9 +107,9 @@ export default function RadarPanel() {
         <details className="radar-import"><summary>Import or start research</summary>
           <p className="muted small">Load a reviewed dossier, inspect it, then save. Missing ELITE reviews keep action at WAIT.</p>
           <input aria-label="Import Radar research" type="file" accept=".json,application/json" disabled={saving} onChange={e => { const f = e.target.files?.[0]; if (f) void importFile(f); e.target.value = '' }} />
-          {draft && <div className="strike-card"><strong>{draft.input.instrument.symbol || 'Unverified instrument'}</strong><p className="muted small">Revision {draft.input.researchRevision} · {draft.review ? 'ELITE review included' : 'ELITE review needed'}</p><button onClick={() => void save()} disabled={saving || !snapshot}>{saving ? 'Saving…' : snapshot && !snapshot.journalExists ? 'Start journal & save research' : 'Save research'}</button><button onClick={() => {setDraft(null);setMessage('')}} disabled={saving}>Cancel</button></div>}
+          {draft && <div className="strike-card"><strong>{draft.input.instrument.symbol || 'Unverified instrument'}</strong><p className="muted small">Revision {draft.input.researchRevision} · {draft.review ? 'ELITE review included' : 'ELITE review needed'} · {draft.forecast ? `forecast ${draft.forecast.confidence}%` : 'forecast optional'}</p><button onClick={() => void save()} disabled={saving || !snapshot}>{saving ? 'Saving…' : snapshot && !snapshot.journalExists ? 'Start journal & save research' : 'Save research'}</button><button onClick={() => {setDraft(null);setMessage('')}} disabled={saving}>Cancel</button></div>}
           <div className="radar-starter"><label>Canadian instrument<input aria-label="Radar instrument" value={symbol} onChange={e => setSymbol(e.target.value.toUpperCase())} placeholder="MSFT.NE" /></label><label>Underlying<input aria-label="Radar underlying" value={underlying} onChange={e => setUnderlying(e.target.value.toUpperCase())} placeholder="MSFT" /></label>
-            <button disabled={!symbol.trim() || !underlying.trim()} onClick={() => {const input = emptyRadarInput(symbol.trim(), underlying.trim());download('radar-research.json', {input, review: emptyEliteReview(input, new Date().toISOString())})}}>Download worksheet</button>
+            <button disabled={!symbol.trim() || !underlying.trim()} onClick={() => {const input = emptyRadarInput(symbol.trim(), underlying.trim());const now = new Date().toISOString();download('radar-research.json', {input, review: emptyEliteReview(input, now), forecast: emptyPredictiveForecast(input.instrument.symbol, input.instrument.underlying, now)})}}>Download worksheet</button>
           </div>
         </details>
       </div>
