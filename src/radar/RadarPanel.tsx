@@ -70,7 +70,7 @@ export default function RadarPanel() {
       const response = await fetch('/api/radar', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...draft, createState: !snapshot.journalExists }) })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || 'Save failed')
-      setDraft(null); setMessage(`Saved and verified. ${result.decision.action}.`); await refresh()
+      setDraft(null); setMessage(`Saved and verified. ${result.prediction?.state ?? result.decision.action}.`); await refresh()
     } catch (e) { setError(e instanceof Error ? e.message : 'Save failed') }
     finally { setSaving(false) }
   }
