@@ -8,6 +8,7 @@ import { createRadarHandler, createRadarService } from '../server/radar'
 import { readJournal } from '../server/radar-journal'
 import type { StockSnapshot } from '../src/live/models'
 import { radarFixture } from './radar-fixture'
+import { emptyPredictiveForecast } from '../src/radar/predictive'
 
 const roots: string[] = []
 const servers: http.Server[] = []
@@ -79,6 +80,37 @@ describe('Radar journal API', () => {
     const state = readJournal(join(root, 'journal.json'))!
     expect(state.runs).toHaveLength(1)
     expect(state.signals).toHaveLength(0)
+  })
+
+  it('persists an 80%+ predictive strike independently of cash or ELITE allocation', async () => {
+    const root = temporaryRoot(), { base, post } = await serve(root)
+    const asOf = new Date().toISOString()
+    const input = radarFixture(asOf)
+    const forecast = emptyPredictiveForecast(input.instrument.symbol, input.instrument.underlying, asOf)
+    forecast.direction = 'BULLISH'
+    forecast.confidence = 84
+    forecast.expectedPath = 'Relative strength persists while the thesis and macro assumptions remain intact.'
+    forecast.assumptions = ['Canadian price/liquidity confirms the underlying and the company thesis remains intact.']
+    forecast.baseCase = 'The exact Canadian instrument outperforms XEQT over the selected horizon.'
+    forecast.contraryCase = 'Rates reaccelerate or company evidence weakens enough to break the setup.'
+    forecast.invalidation = 'A thesis break or failed Canadian confirmation invalidates the forecast.'
+    forecast.relativeToXeqt = 'Expected to outperform XEQT if the stated assumptions continue to hold.'
+    forecast.canadianConfirmation = { required: true, status: 'CONFIRMED', reason: 'Exact instrument and underlying alignment confirmed.' }
+    forecast.evidence = [
+      { sourceUrl: 'https://example.com/source-a', asOf },
+      { sourceUrl: 'https://example.org/source-b', asOf },
+    ]
+    const saved = await post({ input, forecast, createState: true })
+    expect(saved.status).toBe(200)
+    expect(await saved.json()).toMatchObject({
+      decision: { action: 'WAIT' },
+      prediction: { state: 'STRIKE CANDIDATE', confidence: 84, actionable: true },
+    })
+    const body = await (await fetch(`${base}/api/radar`)).json()
+    expect(body.candidates[0]).toMatchObject({
+      prediction: { state: 'STRIKE CANDIDATE', confidence: 84, actionable: true },
+      decision: { action: 'WAIT' },
+    })
   })
 
   it('fails closed on corrupt state and never overwrites it or exposes old candidates', async () => {
