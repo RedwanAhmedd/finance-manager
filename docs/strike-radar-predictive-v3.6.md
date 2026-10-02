@@ -1,6 +1,6 @@
 # Strike Radar Predictive v3.6
 
-This document is the GitHub source of truth for the cloud Strike Radar predictive overlay. It supplements the local ELITE operating contract in `docs/strike-radar-elite.md`.
+This document is the shared source of truth for the cloud Strike Radar and the local Finance Manager Predictive v3.6 overlay. It supplements the ELITE operating contract in `docs/strike-radar-elite.md`.
 
 ## Ownership and execution boundary
 
@@ -106,6 +106,8 @@ Notify only for meaningful changes such as a thesis shock, severity escalation, 
 - Never treat a price level, analyst consensus, gap, or single catalyst as sufficient by itself.
 - Never present confidence as a guarantee of profit.
 
-## Cloud alignment
+## Implementation alignment
 
-The active Strike Radar cloud task was updated to this v3.6 policy on 2026-10-02. This repository document exists so future local-engine work can be checked against the same behavioral contract rather than relying on chat history.
+The active Strike Radar cloud task was updated to this v3.6 policy on 2026-10-02. The repository now also implements the confidence/state engine in `src/radar/predictive.ts`, persists frozen forecasts with ELITE receipts in `server/radar.ts`, exposes predictive state through the Radar snapshot, and renders strike candidates in the Finance Manager panel.
+
+The local calibration helpers score frozen forecasts by their declared horizon and summarize the 65-79, 80-89 and 90+ buckets. Autonomous outcome collection can be added on top of those frozen records without rewriting old forecasts.
