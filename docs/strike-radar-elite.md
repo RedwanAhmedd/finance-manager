@@ -59,7 +59,7 @@ Maintain three separate internal verdicts:
 - **Opportunity:** entry attractiveness, including the existing PASS/WATCH/BUY/STRIKE research vocabulary.
 - **Allocation:** current portfolio, cash, execution and risk readiness.
 
-The user-facing money action is a conclusion from these verdicts, not a rename of a score. **Opportunity quality is independent of current cash.** Predictive v3.6 may therefore surface SETUP / STRIKE CANDIDATE / ELITE STRIKE even when allocation is unknown. Allocation only determines whether Finance Manager can attach a verified amount or execution-ready money action. Preserve conservative `NO ACTION` behavior internally where used by the v4 compatibility engine.
+The user-facing money action is a conclusion from these verdicts, not a rename of a score. **Opportunity quality is independent of current cash.** Predictive v3.7 may therefore surface SETUP / STRIKE CANDIDATE / ELITE STRIKE even when allocation is unknown. Allocation only determines whether Finance Manager can attach a verified amount or execution-ready money action. Preserve conservative `NO ACTION` behavior internally where used by the v4 compatibility engine.
 
 Planned deposits are not settled buying power. Separate settled brokerage cash, unsettled proceeds, open-order reservations, confirmed incoming contributions and protected household/rental money. Do not use any remembered cash amount as an opportunity gate. Verified deployable CAD cash is used only when Finance Manager is asked to attach an amount or execution-ready allocation; otherwise amount/size remains unknown and the user decides funding after seeing the opportunity.
 
@@ -88,7 +88,7 @@ Record decisions before attempting notification: instrument/ownership identity, 
 
 Retries and process restarts use the same episode ID. A changed timestamp or price within an unchanged state is not a new alert. Re-alert only for escalation or a material thesis, action, entry/valuation, allocation or coverage change. Preserve recovery transitions without sending routine status noise. Never backfill alerts, claim a past alert would have occurred, or create a second independent alert system. Existing delivery paths require explicit end-to-end verification before they are described as operational.
 
-Keep forecasts and catalysts dated with horizon, probability/range where justified, contrary case and falsification conditions. Track rejected, missed and failed ideas alongside winners to expose selection bias. Calibration compares frozen predictions with later outcomes over their intended horizons; revise methodology prospectively and version it. Evidence quality and uncertainty must remain visible even when the score is high. No promise of certainty or profit.
+Keep forecasts and catalysts dated with horizon, Setup Score, probability/range only where statistically justified, data-quality/UNKNOWN state, contrary case and falsification conditions. Track rejected, missed and failed ideas alongside winners to expose selection bias. Calibration compares frozen predictions with later outcomes over their intended horizons; revise methodology prospectively and version it. Evidence quality and uncertainty must remain visible even when the score is high. No promise of certainty or profit.
 
 ## Simple output contract
 
@@ -104,7 +104,7 @@ Notify only for a genuinely actionable buy, meaningful owned-position warning, m
 
 Finance Manager owns the running Radar panel and `/api/radar`. StockStream owns
 portfolio/price records; its read transport remains GET-only. The preserved v4
-engine is `src/radar/engine.ts`; the Predictive v3.6 overlay is
+engine is `src/radar/engine.ts`; the Predictive v3.7 overlay is
 `src/radar/predictive.ts`. Predictive forecasts are frozen into the same
 checksum-linked receipt path as ELITE reviews, while the legacy file journal and
 CLI continue accepting schema-4 research unchanged. The app adds explicit ELITE reviews, separate source/capital
@@ -143,7 +143,7 @@ npm run radar -- --help
 The CLI requires Node with TypeScript stripping (22.18+ or a newer supported
 release). Start a worksheet in the panel, or use `npm run --silent radar --
 --init MSFT.NE --underlying MSFT`. Import either the v4 dossier or a JSON envelope
-`{ "input": <v4 dossier>, "review": <ELITE review>, "forecast": <Predictive v3.6 forecast> }`. The exported worksheet
+`{ "input": <v4 dossier>, "review": <ELITE review>, "forecast": <Predictive v3.7 forecast> }`. The exported worksheet
 includes the empty review contract. A first save must explicitly create the
 journal. Existing state is validated before every append; an error never resets
 history. A receipt failure after journal save reports that partial commit and
