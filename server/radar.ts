@@ -80,7 +80,7 @@ export function createRadarService(directory: string, getStock: () => Promise<St
     const benchmarkInput = readJson(resolve(root, 'benchmark.json'))
     if (benchmarkInput) benchmark = buildBenchmarkLab({ ...(benchmarkInput as BenchmarkLabInput), evaluatedAt: now })
     return {
-      version: '5.2+3.6', fetchedAt: now, status: !sourceFresh ? 'degraded' : state ? 'ready' : 'empty', action: 'WAIT',
+      version: '5.2+3.7', fetchedAt: now, status: !sourceFresh ? 'degraded' : state ? 'ready' : 'empty', action: 'WAIT',
       reason: candidates.length ? 'Review the latest entries below.' : 'No reviewed entry yet.', journalExists: state !== null, runCount: state?.runs.length ?? 0, candidates,
       owned: sourceFresh ? stock!.holdings.filter(h => h.role !== 'cash' && h.role !== 'watchlist' && h.shares > 0).map(h => ({ symbol: h.symbol, shares: h.shares, priceDate: h.asOf })) : [],
       coverage: { portfolio: sourceFresh, liveMarket: liveResearch, news: liveResearch, notifications: !!alertStatus?.configured && !alertStatus.failing }, alerts: alertStatus, issues, benchmark,
