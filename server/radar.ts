@@ -5,6 +5,7 @@ import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, wri
 import { resolve } from 'node:path'
 import { evaluateRadar, parseRadarInput } from '../src/radar/engine.ts'
 import { evaluateElite, parseEliteReview, type EliteReview, type EliteEvaluation } from '../src/radar/elite.ts'
+import { evaluatePredictiveForecast, parsePredictiveForecast, type PredictiveForecast, type PredictiveEvaluation } from '../src/radar/predictive.ts'
 import { buildBenchmarkLab, type BenchmarkLabInput } from '../src/radar/benchmark.ts'
 import type { RadarSnapshot } from '../src/radar/types.ts'
 import type { StockSnapshot } from '../src/live/models.ts'
@@ -13,7 +14,7 @@ import { readJournal, saveRadarRun, type Run } from './radar-journal.ts'
 class RadarCommitError extends Error {
   constructor(readonly runId: number) { super('Research run saved, but ELITE receipt could not be verified. WAIT; inspect this run before retrying.') }
 }
-type Receipt = { runHash: string; savedAt: string; review: EliteReview | null; stock: StockSnapshot | null; decision: EliteEvaluation; digest: string }
+type Receipt = { runHash: string; savedAt: string; review: EliteReview | null; stock: StockSnapshot | null; decision: EliteEvaluation; forecast?: PredictiveForecast | null; prediction?: PredictiveEvaluation | null; digest: string }
 const digest = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex')
 function readJson(path: string): unknown | null {
   let stat
@@ -27,14 +28,18 @@ function writeNew(path: string, value: unknown) {
   try { writeFileSync(fd, encoded); fsyncSync(fd) } finally { closeSync(fd) }
   if (readFileSync(path, 'utf8') !== encoded) throw new Error('Radar record readback failed')
 }
-function reviewFor(path: string, run: Run): EliteReview | null {
+function receiptFor(path: string, run: Run): Receipt | null {
   const r = readJson(path) as Receipt | null
   if (!r) return null
   const { digest: checksum, ...body } = r
+  const forecast = r.forecast ?? null
+  const prediction = forecast ? evaluatePredictiveForecast(forecast, run.savedAt) : null
   if (checksum !== digest(body) || r.runHash !== run.hash || r.savedAt !== run.savedAt ||
     (r.review && !parseEliteReview(r.review).ok) ||
+    (forecast && !parsePredictiveForecast(forecast).ok) ||
+    JSON.stringify(r.prediction ?? null) !== JSON.stringify(prediction) ||
     JSON.stringify(r.decision) !== JSON.stringify(evaluateElite(run.input, run.evaluation, r.review, r.stock, run.savedAt))) throw new Error('ELITE receipt integrity failed')
-  return r.review
+  return r
 }
 async function readBody(req: IncomingMessage) {
   const chunks: Buffer[] = []; let size = 0
@@ -56,10 +61,13 @@ export function createRadarService(directory: string, getStock: () => Promise<St
       const days = run.input.policy.strikeWindowDays
       const context = { recentStrikeCount: days == null ? null : state!.signals.filter(s => s.cohort === 'qualified' && s.decision === 'STRIKE' && Date.parse(now) - Date.parse(s.recordedAt) <= days * 86400000 && !(s.symbol === run.input.instrument.symbol && s.evidenceEpisode === run.input.evidenceEpisode)).length }
       const evaluation = evaluateRadar(run.input, now, context)
-      const review = reviewFor(resolve(receipts, `${run.hash}.json`), run)
+      const receipt = receiptFor(resolve(receipts, `${run.hash}.json`), run)
+      const review = receipt?.review ?? null
+      const forecast = receipt?.forecast ?? null
+      const prediction = forecast ? evaluatePredictiveForecast(forecast, now) : null
       const decision = evaluateElite(run.input, evaluation, review, stock, now)
       const priceSide = decision.action === 'SELL' || decision.action === 'TRIM' ? 'bid' as const : 'ask' as const
-      return { savedAt: run.savedAt, decision, evaluation, entryPriceCad: run.input.execution[priceSide], priceSide, priceEvidence: run.input.execution.evidence }
+      return { savedAt: run.savedAt, decision, evaluation, forecast, prediction, entryPriceCad: run.input.execution[priceSide], priceSide, priceEvidence: run.input.execution.evidence }
     })
     // No price/news provider is silently inferred from daily portfolio marks.
     let alertStatus: AlertStatus | undefined
@@ -72,7 +80,7 @@ export function createRadarService(directory: string, getStock: () => Promise<St
     const benchmarkInput = readJson(resolve(root, 'benchmark.json'))
     if (benchmarkInput) benchmark = buildBenchmarkLab({ ...(benchmarkInput as BenchmarkLabInput), evaluatedAt: now })
     return {
-      version: '5.2', fetchedAt: now, status: !sourceFresh ? 'degraded' : state ? 'ready' : 'empty', action: 'WAIT',
+      version: '5.2+3.7', fetchedAt: now, status: !sourceFresh ? 'degraded' : state ? 'ready' : 'empty', action: 'WAIT',
       reason: candidates.length ? 'Review the latest entries below.' : 'No reviewed entry yet.', journalExists: state !== null, runCount: state?.runs.length ?? 0, candidates,
       owned: sourceFresh ? stock!.holdings.filter(h => h.role !== 'cash' && h.role !== 'watchlist' && h.shares > 0).map(h => ({ symbol: h.symbol, shares: h.shares, priceDate: h.asOf })) : [],
       coverage: { portfolio: sourceFresh, liveMarket: liveResearch, news: liveResearch, notifications: !!alertStatus?.configured && !alertStatus.failing }, alerts: alertStatus, issues, benchmark,
@@ -83,18 +91,26 @@ export function createRadarService(directory: string, getStock: () => Promise<St
     if (!parsed.ok) throw new Error(parsed.errors.slice(0, 4).join('; '))
     let review: EliteReview | null = null
     if (body.review != null) { const parsedReview = parseEliteReview(body.review); if (!parsedReview.ok) throw new Error(parsedReview.errors.join('; ')); review = parsedReview.review }
+    let forecast: PredictiveForecast | null = null
+    if (body.forecast != null) {
+      const parsedForecast = parsePredictiveForecast(body.forecast)
+      if (!parsedForecast.ok) throw new Error(parsedForecast.errors.join('; '))
+      forecast = parsedForecast.forecast
+      if (forecast.symbol !== parsed.input.instrument.symbol || forecast.underlying !== parsed.input.instrument.underlying) throw new Error('Forecast belongs to a different instrument or underlying.')
+    }
     if (body.createState !== undefined && typeof body.createState !== 'boolean') throw new Error('createState must be explicit true or false')
     const stock = await source()
     mkdirSync(root, { recursive: true, mode: 0o700 }); mkdirSync(receipts, { recursive: true, mode: 0o700 })
     const summary = saveRadarRun(parsed.input, journal, body.createState === true, { recordSignals: false })
     const run = readJournal(journal)!.runs[summary.runId - 1]
     const decision = evaluateElite(run.input, run.evaluation, review, stock, run.savedAt)
-    const record = { runHash: run.hash, savedAt: run.savedAt, review, stock, decision }
+    const prediction = forecast ? evaluatePredictiveForecast(forecast, run.savedAt) : null
+    const record = { runHash: run.hash, savedAt: run.savedAt, review, stock, decision, forecast, prediction }
     try {
       writeNew(resolve(receipts, `${run.hash}.json`), { ...record, digest: digest(record) })
-      reviewFor(resolve(receipts, `${run.hash}.json`), run)
+      receiptFor(resolve(receipts, `${run.hash}.json`), run)
     } catch { throw new RadarCommitError(run.id) }
-    return { runId: summary.runId, decision, persisted: true, readbackVerified: true, notificationDelivery: 'NOT CONNECTED' }
+    return { runId: summary.runId, decision, prediction, persisted: true, readbackVerified: true, notificationDelivery: 'NOT CONNECTED' }
   }
   async function sendTestAlert() {
     if (!alerts) throw new Error('Phone alerts are not set up. Add NTFY_TOPIC to .env.local and restart.')
