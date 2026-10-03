@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import RadarPanel from '../src/radar/RadarPanel'
 const renderers: ReactTestRenderer[] = []
 afterEach(() => {renderers.splice(0).forEach(r => r.unmount()); vi.unstubAllGlobals()})
-const snapshot = {version:'5.2+3.6', fetchedAt:'2026-09-23T14:00:00Z', status:'ready', journalExists:true, reason:'Review your entry', runCount:1, owned:[], issues:[], benchmark:null, candidates:[{ savedAt:'2026-09-23T14:00:00Z', entryPriceCad:20, priceSide:'ask', priceEvidence:[{asOf:'2026-09-23T13:59:00Z',sourceUrl:'https://example.com/quote'}], evaluation:{evaluatedAt:'2026-09-23T14:00:00Z'}, decision:{symbol:'FICTIONAL.NE',action:'BUY',amountCad:500,reason:'Fictional reviewed evidence',blockers:[],thesis:'INTACT',opportunity:'BUY',allocation:'READY'}}]}
+const snapshot = {version:'5.2+3.7', fetchedAt:'2026-09-23T14:00:00Z', status:'ready', journalExists:true, reason:'Review your entry', runCount:1, owned:[], issues:[], benchmark:null, candidates:[{ savedAt:'2026-09-23T14:00:00Z', entryPriceCad:20, priceSide:'ask', priceEvidence:[{asOf:'2026-09-23T13:59:00Z',sourceUrl:'https://example.com/quote'}], evaluation:{evaluatedAt:'2026-09-23T14:00:00Z'}, decision:{symbol:'FICTIONAL.NE',action:'BUY',amountCad:500,reason:'Fictional reviewed evidence',blockers:[],thesis:'INTACT',opportunity:'BUY',allocation:'READY'}}]}
 describe('Radar display lifecycle', () => {
   it('clears a prior actionable result when the next source read fails', async () => {
     const fetch = vi.fn().mockResolvedValueOnce({ok:true,json:async()=>snapshot}).mockResolvedValueOnce({ok:false,json:async()=>({error:'Journal integrity failed'})})
@@ -27,7 +27,7 @@ describe('Radar display lifecycle', () => {
         ...snapshot.candidates[0],
         decision: { ...snapshot.candidates[0].decision, action: 'WAIT', amountCad: null, reason: 'Funding not supplied.' },
         forecast: { expectedPath: 'Fictional relative strength persists after Canadian confirmation.' },
-        prediction: { state: 'STRIKE CANDIDATE', confidence: 84, actionable: true, direction: 'BULLISH', horizon: '1-5 SESSIONS' },
+        prediction: { state: 'STRIKE CANDIDATE', setupScore: 84, probability: { status: 'UNKNOWN', positive5Session: null, outperformBenchmark5Session: null }, dataQualityScore: 92, actionable: true, direction: 'BULLISH', horizon: '1-5 SESSIONS' },
       }],
     }
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => predictive }))
@@ -35,7 +35,7 @@ describe('Radar display lifecycle', () => {
     await act(async()=>{renderer=create(createElement(RadarPanel));renderers.push(renderer)})
     const text = JSON.stringify(renderer.toJSON())
     expect(text).toContain('STRIKE CANDIDATE')
-    expect(text).toContain('84%')
+    expect(text).toContain('Setup 84/100')\n    expect(text).toContain('P(+5d)')\n    expect(text).toContain('UNKNOWN')
     expect(text).toContain('Execution and sizing are your decision')
     expect(text).not.toContain('Funding not supplied.')
   })
