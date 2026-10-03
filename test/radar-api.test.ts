@@ -82,13 +82,13 @@ describe('Radar journal API', () => {
     expect(state.signals).toHaveLength(0)
   })
 
-  it('persists an 80%+ predictive strike independently of cash or ELITE allocation', async () => {
+  it('persists an 80+ setup-score strike independently of cash or ELITE allocation', async () => {
     const root = temporaryRoot(), { base, post } = await serve(root)
     const asOf = new Date().toISOString()
     const input = radarFixture(asOf)
     const forecast = emptyPredictiveForecast(input.instrument.symbol, input.instrument.underlying, asOf)
     forecast.direction = 'BULLISH'
-    forecast.confidence = 84
+    forecast.setupScore = 84
     forecast.expectedPath = 'Relative strength persists while the thesis and macro assumptions remain intact.'
     forecast.assumptions = ['Canadian price/liquidity confirms the underlying and the company thesis remains intact.']
     forecast.baseCase = 'The exact Canadian instrument outperforms XEQT over the selected horizon.'
@@ -104,11 +104,11 @@ describe('Radar journal API', () => {
     expect(saved.status).toBe(200)
     expect(await saved.json()).toMatchObject({
       decision: { action: 'WAIT' },
-      prediction: { state: 'STRIKE CANDIDATE', confidence: 84, actionable: true },
+      prediction: { state: 'STRIKE CANDIDATE', setupScore: 84, actionable: true },
     })
     const body = await (await fetch(`${base}/api/radar`)).json()
     expect(body.candidates[0]).toMatchObject({
-      prediction: { state: 'STRIKE CANDIDATE', confidence: 84, actionable: true },
+      prediction: { state: 'STRIKE CANDIDATE', setupScore: 84, actionable: true },
       decision: { action: 'WAIT' },
     })
   })
