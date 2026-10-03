@@ -9,7 +9,8 @@ function download(name: string, value: unknown) {
   const link = document.createElement('a'); link.href = url; link.download = name; link.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
-const money = (n: number) => `C${n.toLocaleString('en-CA', { maximumFractionDigits: 2 })}`\nconst probabilityText = (n: number | null) => n == null ? 'UNKNOWN' : `${(n * 100).toFixed(1).replace(/\\.0$/, '')}%`
+const money = (n: number) => `C$${n.toLocaleString('en-CA', { maximumFractionDigits: 2 })}`
+const probabilityText = (n: number | null) => n == null ? 'UNKNOWN' : `${(n * 100).toFixed(1).replace(/\.0$/, '')}%`
 export default function RadarPanel() {
   const [snapshot, setSnapshot] = useState<RadarSnapshot | null>(null)
   const [loading, setLoading] = useState(true)
