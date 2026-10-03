@@ -115,15 +115,22 @@ and `NTFY_TOKEN`, then restart `npm run serve` to use these server-side settings
 The phone must subscribe to the same topic. The alert state is kept in the
 private `.radar/alerts.json` file; retain it across restarts to keep deduplication.
 
-The local app now implements the Predictive v3.6 state machine and persists frozen
-forecasts alongside ELITE receipts. A forecast can reach **STRIKE CANDIDATE** at
-80-89% or **ELITE STRIKE** at 90%+ without current cash being known; Canadian
-confirmation still gates short-horizon action when required. Autonomous forecast
-generation still depends on the cloud/live research layer and available market
-feeds. Modules with missing definitions/evidence remain unknown. The assistant
-explains verified Radar evidence and never auto-trades. See [the operating contract](docs/strike-radar-elite.md)
-for evidence requirements, private files and compatibility CLI usage.
+The local app now implements **Predictive v3.7 CALIBRATED**. It deliberately
+separates a **Setup Score** from empirical probability: an 84/100 setup is not
+displayed as an 84% chance of profit. Probability remains **UNKNOWN** until a
+point-in-time calibration method and sample support it. Forecasts also carry an
+explicit data-quality state, UNKNOWN/stale feature masks and point-in-time
+feature timestamps. Canadian confirmation still gates short-horizon action when
+required. The assistant explains verified Radar evidence and never auto-trades.
+See [the operating contract](docs/strike-radar-elite.md) for evidence
+requirements, private files and compatibility CLI usage.
 
-The cloud task and local Finance Manager now share the Predictive v3.6 contract: calibrated confidence bands, an 80% minimum for **STRIKE CANDIDATE**, a 90% minimum for **ELITE STRIKE**, frozen forecasts plus calibration helpers, and no cash/ammo gate for opportunity quality. See [Strike Radar Predictive v3.6](docs/strike-radar-predictive-v3.6.md). Execution and sizing always remain the user's decision.
+The cloud task, StockStream learning ledger and local Finance Manager now share
+the Predictive v3.7 contract: setup score for ranking; separate P(positive),
+P(outperform benchmark) and expected-excess-return fields when supportable;
+Brier/log-loss calibration diagnostics; immutable LIVE/BACKTEST forecasts;
+append-only outcomes; explicit UNKNOWN handling; and no cash/ammo gate for
+opportunity quality. See [Strike Radar Predictive v3.7](docs/strike-radar-predictive-v3.7.md).
+Execution and sizing always remain the user's decision.
 
 Run `npm run check` for all app and migrated Radar checks, then `npm run build`.
