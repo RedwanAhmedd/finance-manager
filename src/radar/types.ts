@@ -4,7 +4,7 @@ import type { BenchmarkLabResult } from './benchmark'
 import type { PredictiveEvaluation, PredictiveForecast } from './predictive'
 
 export interface RadarSnapshot {
-  version: '5.2+3.6'
+  version: '5.2+3.7'
   fetchedAt: string
   status: 'empty' | 'ready' | 'degraded'
   action: 'WAIT'
